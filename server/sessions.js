@@ -1,4 +1,4 @@
-import { allow, checkEnv, db, isPlainObject, requireUser } from "../_lib.js";
+import { allow, checkEnv, db, isPlainObject, requireUser } from "./lib.js";
 
 // PATCH merges top-level fields (plan, notes, cues...) into the day's session.
 // With create: true, fields already saved by the other person win, so two phones

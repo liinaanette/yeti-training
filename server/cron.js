@@ -1,8 +1,8 @@
 import webpush from "web-push";
-import { db, loadAll, pushConfigured } from "./_lib.js";
+import { db, loadAll, pushConfigured } from "./lib.js";
 import { STAGES, dogName, fmt, todaySummary, weeklySummary, weeklyText } from "../public/plan.js";
 
-// Shared by api/cron-morning.js and api/cron-evening.js, which Vercel Cron calls (see vercel.json).
+// The daily reminder jobs. Vercel Cron calls /api/cron-morning and /api/cron-evening (see vercel.json and api/app.js).
 export async function runReminders(kind, req, res) {
   if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: "Not allowed" });

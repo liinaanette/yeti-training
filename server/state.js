@@ -1,4 +1,4 @@
-import { allow, checkEnv, db, loadAll, requireUser } from "./_lib.js";
+import { allow, checkEnv, db, loadAll, requireUser } from "./lib.js";
 
 export default async function handler(req, res) {
   if (!allow(req, res, "GET") || !checkEnv(res) || !requireUser(req, res)) return;

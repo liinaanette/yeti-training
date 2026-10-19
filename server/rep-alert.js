@@ -1,4 +1,4 @@
-import { allow, checkEnv, db, requireUser } from "./_lib.js";
+import { allow, checkEnv, db, requireUser } from "./lib.js";
 
 // Schedules (POST) or cancels (DELETE) the "time's up" push for a running rep, using Upstash QStash
 // as the delayed scheduler. QStash calls api/rep-alert-fire at the end time, which sends the push.

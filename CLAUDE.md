@@ -8,9 +8,10 @@ A phone-first web app two people (the dog's owners) use to run separation-anxiet
 - `public/plan.js` – **the training logic** (pure functions). Shared by the browser and the server reminder job. Change training rules here and only here.
 - `public/sw.js` – service worker that shows push notifications.
 - `public/vendor/` – html2canvas 1.4.1 and jsPDF 2.5.1, loaded only when exporting the report.
-- `api/*.js` – Vercel serverless functions (Node, ESM). `api/_lib.js` has the DB connection, table creation/migrations, auth cookie helpers and `loadAll()`.
-- `api/_cron.js` + `api/cron-morning.js` / `api/cron-evening.js` – daily reminder jobs (schedules in `vercel.json`, UTC). Sunday evening also sends the weekly summary.
-- `api/rep-alert.js` + `api/rep-alert-fire.js` – "time's up" push at the end of a rep, scheduled through Upstash QStash (optional; needs `QSTASH_*` env). The fire endpoint only accepts QStash-signed requests.
+- `api/app.js` – the **only** serverless function. `vercel.json` rewrites every `/api/<route>` to it as `?route=<route>`, and it dispatches to a handler in `server/`. Vercel's Hobby plan allows at most 12 functions per deployment, so never add files to `api/`: add a handler in `server/` and register it in the `routes` map in `api/app.js`.
+- `server/lib.js` – DB connection, table creation/migrations, auth cookie helpers, `loadAll()`.
+- `server/cron.js` – daily reminder jobs, reached as `/api/cron-morning` and `/api/cron-evening` (schedules in `vercel.json`, UTC). Sunday evening also sends the weekly summary.
+- `server/rep-alert.js` + `server/rep-alert-fire.js` – "time's up" push at the end of a rep, scheduled through Upstash QStash (optional; needs `QSTASH_*` env). The fire endpoint only accepts QStash-signed requests.
 - `test/plan.test.js` – unit tests for `plan.js`. Run `npm test`.
 
 ## Data model (Postgres, created automatically on first request)
@@ -22,7 +23,7 @@ A phone-first web app two people (the dog's owners) use to run separation-anxiet
 - `push_subs`: one row per phone with notification preferences (`morning`, `evening`, `weekly`).
 - `login_attempts`: wrong-password limiter (10 per 15 min per IP).
 
-Sessions PATCH (`api/sessions/[date].js`) merges top-level fields; with `create: true` existing fields win. Never put reps back into the session document.
+Sessions PATCH (`server/sessions.js`, at `/api/sessions/<date>`) merges top-level fields; with `create: true` existing fields win. Never put reps back into the session document.
 
 ## Training rules (plan.js)
 

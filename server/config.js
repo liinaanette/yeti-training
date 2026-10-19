@@ -1,4 +1,4 @@
-import { allow, checkEnv, db, isPlainObject, requireUser } from "./_lib.js";
+import { allow, checkEnv, db, isPlainObject, requireUser } from "./lib.js";
 
 export default async function handler(req, res) {
   if (!allow(req, res, "PUT") || !checkEnv(res) || !requireUser(req, res)) return;

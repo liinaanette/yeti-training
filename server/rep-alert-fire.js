@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import webpush from "web-push";
-import { db, pushConfigured, safeEqual } from "./_lib.js";
+import { db, pushConfigured, safeEqual } from "./lib.js";
 
 // Called by Upstash QStash when a rep's time is up. Only requests signed by QStash are accepted.
 function verifyQstash(token, rawBody) {

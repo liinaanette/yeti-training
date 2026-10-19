@@ -1,4 +1,4 @@
-import { allow, checkEnv, db, loadAll, requireUser } from "./_lib.js";
+import { allow, checkEnv, db, loadAll, requireUser } from "./lib.js";
 
 // Every rep (and every real absence) as one row, for Excel or Google Sheets.
 // Times are in the household's time zone.

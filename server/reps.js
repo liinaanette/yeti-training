@@ -1,4 +1,4 @@
-import { RESULTS, allow, checkEnv, db, isDate, isPlainObject, requireUser } from "./_lib.js";
+import { RESULTS, allow, checkEnv, db, isDate, isPlainObject, requireUser } from "./lib.js";
 
 // One row per rep, so two phones logging at once can never overwrite each other.
 // POST { date, reps: [rep, ...] } saves or replaces those reps. DELETE { date, i } removes one.

@@ -1,5 +1,5 @@
 import webpush from "web-push";
-import { allow, checkEnv, db, isPlainObject, pushConfigured, requireUser } from "./_lib.js";
+import { allow, checkEnv, db, isPlainObject, pushConfigured, requireUser } from "./lib.js";
 
 // GET: public key (and this phone's settings when ?endpoint= is given)
 // POST: save this phone's subscription and settings, or { test: true, endpoint } to send a test

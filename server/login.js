@@ -1,4 +1,4 @@
-import { allow, checkEnv, db, passwordMatches, setSession } from "./_lib.js";
+import { allow, checkEnv, db, passwordMatches, setSession } from "./lib.js";
 
 const MAX_FAILS = 10;      // wrong passwords allowed...
 const WINDOW_MIN = 15;     // ...per this many minutes, per network address

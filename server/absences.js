@@ -1,4 +1,4 @@
-import { allow, checkEnv, db, isDate, isPlainObject, requireUser } from "./_lib.js";
+import { allow, checkEnv, db, isDate, isPlainObject, requireUser } from "./lib.js";
 
 // Real absences: times the dog was left alone outside training.
 // POST { absence } saves or updates one (by id). DELETE { id } removes one.
