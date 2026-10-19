@@ -3,6 +3,8 @@ import { allow, checkEnv, db, requireUser } from "./lib.js";
 // Schedules (POST) or cancels (DELETE) the "time's up" push for a running rep, using Upstash QStash
 // as the delayed scheduler. QStash calls api/rep-alert-fire at the end time, which sends the push.
 // Without QStash configured, POST answers { scheduled: false } and the app still shows the start notification.
+// Delivery (QStash, a cold start, Apple/Google push) usually takes a few seconds, so ask for it early.
+const LEAD_MS = 3000;
 const qstashUrl = () => (process.env.QSTASH_URL || "https://qstash.upstash.io").replace(/\/$/, "");
 
 export default async function handler(req, res) {
@@ -27,7 +29,7 @@ export default async function handler(req, res) {
   const message = JSON.stringify({ endpoint: sub.endpoint, title: String(body.title || "Time's up").slice(0, 80), body: String(body.body || "").slice(0, 200) });
   const r = await fetch(`${qstashUrl()}/v2/publish/${destination}`, {
     method: "POST",
-    headers: { ...auth, "Content-Type": "application/json", "Upstash-Not-Before": String(Math.ceil(endsAt / 1000)), "Upstash-Retries": "1" },
+    headers: { ...auth, "Content-Type": "application/json", "Upstash-Not-Before": String(Math.max(Math.floor(Date.now() / 1000), Math.floor((endsAt - LEAD_MS) / 1000))), "Upstash-Retries": "1" },
     body: message,
   });
   if (!r.ok) {
