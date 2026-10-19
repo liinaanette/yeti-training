@@ -20,6 +20,13 @@ export async function db() {
         data jsonb NOT NULL,
         updated_at timestamptz NOT NULL DEFAULT now()
       )`;
+      await sql`CREATE TABLE IF NOT EXISTS push_subs (
+        endpoint text PRIMARY KEY,
+        name text NOT NULL,
+        sub jsonb NOT NULL,
+        prefs jsonb NOT NULL DEFAULT '{"morning": true, "evening": true}',
+        created_at timestamptz NOT NULL DEFAULT now()
+      )`;
       await sql`CREATE TABLE IF NOT EXISTS sessions (
         date text PRIMARY KEY,
         data jsonb NOT NULL,
@@ -89,3 +96,7 @@ export function allow(req, res, ...methods) {
 }
 
 export const isPlainObject = v => v !== null && typeof v === "object" && !Array.isArray(v);
+
+export function pushConfigured() {
+  return !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+}

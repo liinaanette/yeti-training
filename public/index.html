@@ -205,36 +205,14 @@ details[open] summary { margin-bottom: 8px; }
 </div>
 <div class="overlay" id="overlay" hidden></div>
 
-<script>
+<script type="module">
+import * as P from "/plan.js";
 (() => {
   const RESULTS = {
     calm: { label: "Calm", hint: "Relaxed, lying down, sniffing around, sleeping" },
     mild: { label: "Mild stress", hint: "Pacing, waiting at the door, a whine or two" },
     upset: { label: "Upset", hint: "Barking, howling, scratching, heavy panting" },
   };
-  // Stage 1 keeps the person inside the flat behind a baby gate; stage 2 is the real front door.
-  const STAGES = {
-    gate: {
-      label: "Behind the gate", defaultStart: 60, goal: 600,
-      desc: "Dog stays behind the baby gate, you go out of sight inside the flat.",
-      cues: ["Pick up keys", "Open and close the first front door (stay inside)", "Put on shoes", "Rattle the door handle", "Put on jacket", "Close the gate and step straight back", "Grab your bag"],
-    },
-    door: {
-      label: "Front door", defaultStart: 30,
-      desc: "You go out through both front doors.",
-      cues: ["Pick up keys", "Open and close the first door", "Put on shoes", "Open both doors and close them again", "Put on jacket", "Step into the hallway and come straight back", "Grab your bag"],
-    },
-  };
-  const curMode = () => (state.config && state.config.mode) || "door";
-  const sessionMode = s => (s && s.mode) || "door";
-  // Up-and-down rep shapes (fractions of the working duration). The longest rep sits late, an easy rep closes the session.
-  const PATTERNS = [
-    [0.1, 0.3, 0.6, 0.2, 0.8, 0.45, 1, 0.25],
-    [0.15, 0.5, 0.25, 0.7, 0.35, 0.9, 1, 0.2],
-    [0.1, 0.4, 0.7, 0.3, 1, 0.5, 0.85, 0.15],
-  ];
-  const REST_BETWEEN = 90;
-
   const state = {
     tab: "today", config: null, configLoaded: false, sessions: new Map(),
     me: null, authChecked: false, offline: false, trainAnyway: false, ignoreUpset: false, timer: null, openHistory: new Set(),
@@ -244,19 +222,9 @@ details[open] summary { margin-bottom: 8px; }
   const pad = n => String(n).padStart(2, "0");
   const dateStr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const todayStr = () => dateStr(new Date());
-  const dayNum = s => Math.round(Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5);
-  const daysBetween = (a, b) => dayNum(b) - dayNum(a);
-  const addDays = (s, n) => { const d = new Date(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10) + n); return dateStr(d); };
   const niceDate = (s, opts = { weekday: "long", day: "numeric", month: "long" }) =>
     new Date(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)).toLocaleDateString(undefined, opts);
 
-  function fmt(sec) {
-    sec = Math.round(sec);
-    if (sec < 60) return `${sec}s`;
-    if (sec < 3600) { const m = Math.floor(sec / 60), r = sec % 60; return r ? `${m}m ${r}s` : `${m}m`; }
-    const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
-    return m ? `${h}h ${pad(m)}m` : `${h}h`;
-  }
   const clock = sec => { sec = Math.max(0, Math.ceil(sec)); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60; return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`; };
   function parseDur(txt) {
     txt = String(txt).trim().toLowerCase();
@@ -266,84 +234,17 @@ details[open] summary { margin-bottom: 8px; }
     txt.replace(/(\d+(?:\.\d+)?)\s*(h|m|min|s|sec)?/g, (_, n, u) => { matched = true; total += +n * (u === "h" ? 3600 : u && u.startsWith("m") ? 60 : u ? 1 : 1); });
     return matched && total > 0 ? Math.round(total) : null;
   }
-  function roundDur(s) {
-    const step = s < 20 ? 1 : s < 60 ? 5 : s < 600 ? 15 : 60;
-    return Math.max(2, Math.round(s / step) * step);
-  }
-  function grow(w) {
-    if (w < 60) return w + Math.max(5, w * 0.25);
-    if (w < 600) return w * 1.15;
-    if (w < 1800) return w * 1.1;
-    return w * 1.07;
-  }
-
-  // ---------- the training logic ----------
-  const dog = () => (state.config && state.config.dogName) || "Yeti";
-  const doneReps = s => (s.reps || []).filter(r => r.result && r.result !== "skip");
-
-  // What the next session's working (longest) duration should be after a given session.
-  function nextAfter(s) {
-    const prev = s.working;
-    const done = doneReps(s);
-    const upset = done.filter(r => r.result === "upset");
-    const mild = done.filter(r => r.result === "mild");
-    const calmTop = done.some(r => r.result === "calm" && r.target >= prev * 0.97);
-    if (upset.length) {
-      const t = Math.min(...upset.map(r => r.actual || r.target));
-      return { w: Math.min(prev, t) * 0.6, why: `${dog()} got upset last session, so today steps back for an easy win.` };
-    }
-    if (mild.length) return { w: prev * 0.85, why: "Some mild stress last session, so today is a small step back." };
-    if (calmTop) return { w: grow(prev), why: `${dog()} stayed calm through the longest rep last time, so today steps up.` };
-    return { w: prev, why: "Last session didn't get through the longest rep, so today repeats the same level." };
-  }
-
-  function computeWorking(mode = curMode()) {
-    const t = todayStr();
-    const base = getBase(mode) || { seconds: STAGES[mode].defaultStart, setOn: t, setAt: 0 };
-    const past = [...state.sessions.values()]
-      .filter(s => s.date < t && doneReps(s).length && sessionMode(s) === mode)
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-    const last = past[0];
-    if (!last || base.setOn > last.date || (base.setOn === last.date && base.setAt > (last.createdAt || 0))) {
-      return { w: roundDur(base.seconds), why: `Starting from the level you set: ${fmt(base.seconds)}.` };
-    }
-    let { w, why } = nextAfter(last);
-    const gap = daysBetween(last.date, t);
-    if (gap >= 4) { w *= 0.85; why += ` It's been ${gap} days, so it's a little easier.`; }
-    return { w: roundDur(Math.max(3, w)), why };
-  }
-
-  function buildPlan(w, date) {
-    const cap = ((state.config && state.config.capMin) || 30) * 60;
-    const p = PATTERNS[((dayNum(date) % 3) + 3) % 3].slice();
-    const total = arr => arr.reduce((a, f) => a + f * w, 0) + REST_BETWEEN * (arr.length - 1);
-    while (total(p) > cap && p.length > 3) {
-      let idx = -1, max = -1;
-      p.forEach((f, i) => { if (f < 1 && i !== p.length - 1 && f > max) { max = f; idx = i; } });
-      p.splice(idx, 1);
-    }
-    return p.map(f => roundDur(Math.max(2, f * w)));
-  }
-  const pickCues = (date, mode) => { const c = STAGES[mode].cues, n = dayNum(date); return [c[n % c.length], c[(n + 3) % c.length]]; };
-  const getBase = mode => (state.config.bases && state.config.bases[mode]) || (mode === "door" ? state.config.base : null);
-
-  function restSuggested() {
-    const t = todayStr(), per = (state.config && state.config.perWeek) || 5;
-    let count = 0;
-    for (let i = 1; i <= 6; i++) { const s = state.sessions.get(addDays(t, -i)); if (s && doneReps(s).length) count++; }
-    return count >= per;
-  }
-
-  function weekCount() {
-    const t = todayStr(); let c = 0;
-    for (let i = 0; i < 7; i++) { const s = state.sessions.get(addDays(t, -i)); if (s && doneReps(s).length) c++; }
-    return c;
-  }
-  function bestCalmEver(mode) {
-    let best = 0;
-    for (const s of state.sessions.values()) if (sessionMode(s) === mode) for (const r of doneReps(s)) if (r.result === "calm") best = Math.max(best, r.actual || r.target);
-    return best;
-  }
+  // ---------- the training logic (see plan.js) ----------
+  const { STAGES, REST_BETWEEN, fmt, roundDur, doneReps, sessionMode, buildPlan: planFor, pickCues } = P;
+  const dog = () => P.dogName(state.config);
+  const curMode = () => P.curMode(state.config);
+  const getBase = mode => P.getBase(state.config, mode);
+  const nextAfter = s => P.nextAfter(s, dog());
+  const computeWorking = (mode = curMode()) => P.computeWorking(state.config, state.sessions, todayStr(), mode);
+  const buildPlan = (w, date) => planFor(state.config, w, date);
+  const restSuggested = () => P.restSuggested(state.config, state.sessions, todayStr());
+  const weekCount = () => P.weekCount(state.sessions, todayStr());
+  const bestCalmEver = mode => P.bestCalmEver(state.sessions, mode);
 
   // ---------- storage ----------
   class AuthError extends Error {}
@@ -420,7 +321,9 @@ details[open] summary { margin-bottom: 8px; }
     return !s;
   }
   function saveConfig(patch) {
-    state.config = { ...(state.config || {}), ...patch };
+    let tz = null;
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) {}
+    state.config = { ...(state.config || {}), ...patch, ...(tz ? { tz } : {}) };
     render();
     return queueWrite("config", () => api("/api/config", { method: "PUT", body: JSON.stringify({ data: state.config }) }));
   }
@@ -477,7 +380,7 @@ details[open] summary { margin-bottom: 8px; }
         const r = await api("/api/login", { method: "POST", body: JSON.stringify({ name, password }) });
         try { localStorage.setItem("yeti-name", r.name); } catch (e2) {}
         state.me = r.name; document.activeElement && document.activeElement.blur();
-        render(); load();
+        render(); load(); initPush();
       } catch (ex) { err.textContent = ex.message; err.hidden = false; }
     };
   }
@@ -667,6 +570,7 @@ details[open] summary { margin-bottom: 8px; }
             <input type="text" id="stage-base" placeholder="e.g. 2m or 1:30" autocomplete="off"></label>
           <button class="btn" data-act="switch-stage">Switch to ${esc(STAGES[pick].label.toLowerCase())}</button>` : ""}
       </div>
+      ${remindersCard()}
       <div class="card">
         <label class="field">Dog's name<input type="text" id="set-name" value="${esc(c.dogName || "")}" autocomplete="off"></label>
         <label class="field">Training days per week<span class="muted small">After this many sessions in a week, the app suggests a rest day.</span>
@@ -701,6 +605,78 @@ details[open] summary { margin-bottom: 8px; }
           </div>
         </details>
       </div>`;
+  }
+
+  // ---------- reminders (web push) ----------
+  const push = { supported: "serviceWorker" in navigator && "PushManager" in window && "Notification" in window, reg: null, sub: null, prefs: null, error: "", busy: false, ready: false };
+  const keyBytes = b64 => { const s = atob((b64 + "=".repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+  async function initPush() {
+    if (!push.supported) { push.ready = true; return; }
+    try {
+      push.reg = await navigator.serviceWorker.register("/sw.js");
+      push.sub = await push.reg.pushManager.getSubscription();
+      if (push.sub) {
+        const r = await api(`/api/push?endpoint=${encodeURIComponent(push.sub.endpoint)}`);
+        push.prefs = r.subscribed ? r.prefs : null;
+      }
+    } catch (e) { push.error = e.message; }
+    push.ready = true;
+    if (state.tab === "settings") render();
+  }
+  async function pushAction(fn) {
+    if (push.busy) return;
+    push.busy = true; push.error = ""; render();
+    try { await fn(); } catch (e) { push.error = e.message || "Something went wrong."; }
+    push.busy = false; render();
+  }
+  const turnOnPush = () => pushAction(async () => {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") throw new Error("Notifications are blocked for this app. Allow them in your phone's settings, then try again.");
+    const { publicKey } = await api("/api/push");
+    push.reg = push.reg || await navigator.serviceWorker.register("/sw.js");
+    push.sub = (await push.reg.pushManager.getSubscription()) || await push.reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
+    const r = await api("/api/push", { method: "POST", body: JSON.stringify({ subscription: push.sub.toJSON(), prefs: { morning: true, evening: true } }) });
+    push.prefs = r.prefs;
+    await api("/api/push", { method: "POST", body: JSON.stringify({ test: true, endpoint: push.sub.endpoint }) });
+    toast("Reminders are on. A test notification is on its way.");
+  });
+  const savePushPrefs = prefs => pushAction(async () => {
+    const r = await api("/api/push", { method: "POST", body: JSON.stringify({ subscription: push.sub.toJSON(), prefs }) });
+    push.prefs = r.prefs;
+  });
+  const testPush = () => pushAction(async () => {
+    await api("/api/push", { method: "POST", body: JSON.stringify({ test: true, endpoint: push.sub.endpoint }) });
+    toast("Test sent. It should arrive in a few seconds.");
+  });
+  const turnOffPush = () => pushAction(async () => {
+    await api("/api/push", { method: "DELETE", body: JSON.stringify({ endpoint: push.sub.endpoint }) });
+    await push.sub.unsubscribe().catch(() => {});
+    push.sub = null; push.prefs = null;
+    toast("Reminders are off on this phone.");
+  });
+
+  function remindersCard() {
+    const iosNotInstalled = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.matchMedia("(display-mode: standalone)").matches;
+    let inner;
+    if (!push.supported || iosNotInstalled) {
+      inner = `<p class="small muted">${iosNotInstalled
+        ? "On iPhone, reminders only work from the home screen app. In Safari tap Share, then Add to Home Screen, then open Yeti from there."
+        : "This browser can't show notifications. Try Chrome on Android, or the home screen app on iPhone."}</p>`;
+    } else if (!push.ready) {
+      inner = `<p class="small muted">Checking this phone…</p>`;
+    } else if (push.sub && push.prefs) {
+      inner = `
+        <label class="check"><input type="checkbox" id="push-morning" ${push.prefs.morning ? "checked" : ""} ${push.busy ? "disabled" : ""}> Morning: today's plan</label>
+        <label class="check"><input type="checkbox" id="push-evening" ${push.prefs.evening ? "checked" : ""} ${push.busy ? "disabled" : ""}> Evening: nudge if nobody has trained yet</label>
+        <div class="row"><button class="btn sm quiet" data-act="push-test" ${push.busy ? "disabled" : ""}>Send a test</button><button class="btn sm ghost" data-act="push-off" ${push.busy ? "disabled" : ""}>Turn off on this phone</button></div>`;
+    } else {
+      inner = `<button class="btn" data-act="push-on" ${push.busy ? "disabled" : ""}>Turn on reminders on this phone</button>`;
+    }
+    return `<div class="card">
+      <div><h2>Reminders</h2><p class="small muted">Each of you turns this on on your own phone. Morning comes around 7–8, the evening nudge around 6–7.</p></div>
+      ${inner}
+      ${push.error ? `<p class="small" style="color:var(--upset)">${esc(push.error)}</p>` : ""}
+    </div>`;
   }
 
   // ---------- timer ----------
@@ -811,6 +787,9 @@ details[open] summary { margin-bottom: 8px; }
     const act = b.dataset.act, t = todayStr();
     if (act === "start") startRep(+b.dataset.i);
     else if (act === "logout") { api("/api/logout", { method: "POST" }).catch(() => {}).finally(() => { state.me = null; state.configLoaded = false; lastSnapshot = ""; render(); }); }
+    else if (act === "push-on") turnOnPush();
+    else if (act === "push-off") turnOffPush();
+    else if (act === "push-test") testPush();
     else if (act === "goto-settings") { state.tab = "settings"; render(); window.scrollTo(0, 0); }
     else if (act === "pick-stage") { state.stagePick = b.dataset.mode; render(); }
     else if (act === "switch-stage") {
@@ -850,6 +829,10 @@ details[open] summary { margin-bottom: 8px; }
   });
 
   appEl.addEventListener("change", e => {
+    if (e.target.id === "push-morning" || e.target.id === "push-evening") {
+      savePushPrefs({ morning: document.getElementById("push-morning").checked, evening: document.getElementById("push-evening").checked });
+      return;
+    }
     if (e.target.id === "cues-done") { ensureToday(); saveSession(todayStr(), { cuesDone: e.target.checked }); }
   });
   appEl.addEventListener("focusout", e => {
@@ -878,7 +861,7 @@ details[open] summary { margin-bottom: 8px; }
     }
     state.authChecked = true;
     render();
-    if (state.me) load();
+    if (state.me) { load(); initPush(); }
   })();
   const refresh = () => { if (state.me && document.visibilityState === "visible") load(); };
   setInterval(refresh, 15000);

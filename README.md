@@ -16,6 +16,18 @@ A small web app for training a dog with separation anxiety. It gives you a daily
 4. **Redeploy:** go to **Deployments**, open the latest one and click **Redeploy**, so it picks up the new variables.
 5. Open the site and log in with your name and the password, then set the dog's current alone time.
 
+## Daily reminders (optional)
+
+Push notifications: today's plan every morning, and an evening nudge if nobody has trained yet.
+
+1. Add three more environment variables in Vercel:
+   - `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`: generate a pair with `npx web-push generate-vapid-keys`
+   - `CRON_SECRET`: any long random string. Vercel sends it to the reminder job so nobody else can trigger it.
+2. Redeploy.
+3. On each phone, open **Settings → Reminders → Turn on reminders on this phone**. On iPhone this only works from the home screen app (iOS 16.4 or newer).
+
+The times are set in `vercel.json` in UTC: 05:00 for the morning and 16:00 for the evening. On Vercel's free plan a job can run any time within that hour.
+
 ## On your phones
 
 - **iPhone:** open the site in Safari, tap Share, then **Add to Home Screen**.
