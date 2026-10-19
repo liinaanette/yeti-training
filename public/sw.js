@@ -7,6 +7,9 @@ self.addEventListener("push", event => {
     icon: "/icon-192.png",
     badge: "/icon-192.png",
     tag: data.tag || "daily-plan",
+    renotify: !!data.renotify,
+    requireInteraction: !!data.requireInteraction,
+    vibrate: data.vibrate,
     data: { url: data.url || "/" },
   }));
 });

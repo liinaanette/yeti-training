@@ -79,7 +79,7 @@ export function checkEnv(res) {
 
 const sign = value => crypto.createHmac("sha256", process.env.SESSION_SECRET).update(value).digest("base64url");
 
-function safeEqual(a, b) {
+export function safeEqual(a, b) {
   const ha = crypto.createHash("sha256").update(String(a)).digest();
   const hb = crypto.createHash("sha256").update(String(b)).digest();
   return crypto.timingSafeEqual(ha, hb);

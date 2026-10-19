@@ -26,6 +26,8 @@ Push notifications: today's plan every morning, and an evening nudge if nobody h
 2. Redeploy.
 3. On each phone, open **Settings → Reminders → Turn on reminders on this phone**. On iPhone this only works from the home screen app (iOS 16.4 or newer).
 
+**Time's up alerts during reps (optional):** add the free **Upstash QStash** integration in Vercel (Storage or Integrations → Upstash → QStash). It sets `QSTASH_TOKEN`, `QSTASH_URL`, `QSTASH_CURRENT_SIGNING_KEY` and `QSTASH_NEXT_SIGNING_KEY`. Redeploy. Phones with reminders on then get a push when each rep ends, even when locked.
+
 The times are set in `vercel.json` in UTC: 05:00 for the morning and 16:00 for the evening. On Vercel's free plan a job can run any time within that hour.
 
 ## Features

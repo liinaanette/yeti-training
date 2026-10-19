@@ -10,6 +10,7 @@ A phone-first web app two people (the dog's owners) use to run separation-anxiet
 - `public/vendor/` – html2canvas 1.4.1 and jsPDF 2.5.1, loaded only when exporting the report.
 - `api/*.js` – Vercel serverless functions (Node, ESM). `api/_lib.js` has the DB connection, table creation/migrations, auth cookie helpers and `loadAll()`.
 - `api/_cron.js` + `api/cron-morning.js` / `api/cron-evening.js` – daily reminder jobs (schedules in `vercel.json`, UTC). Sunday evening also sends the weekly summary.
+- `api/rep-alert.js` + `api/rep-alert-fire.js` – "time's up" push at the end of a rep, scheduled through Upstash QStash (optional; needs `QSTASH_*` env). The fire endpoint only accepts QStash-signed requests.
 - `test/plan.test.js` – unit tests for `plan.js`. Run `npm test`.
 
 ## Data model (Postgres, created automatically on first request)
