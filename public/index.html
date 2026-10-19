@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Yeti Alone-Time Training</title>
-<meta name="theme-color" content="#2c55e0">
+<meta name="theme-color" content="#1e1b19">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -13,43 +13,54 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 <style>
-/* Layout: one narrow phone column, today's plan as a ticket of reps, bottom tab bar. Snow-and-cobalt palette for a dog called Yeti. */
+/* Layout: one phone column. A dark "hero" card for today's numbers, then a timeline of reps; bottom tab bar with icons.
+   Palette from Yeti himself: phantom black and tan, white chest spot, on the icon's cool blue-grey. */
 :root {
-  --bg: #e9eef1;
+  --bg: #e4e9ee;
   --surface: #ffffff;
-  --surface-2: #f4f7f9;
-  --line: #d4dde3;
-  --ink: #15202a;
-  --muted: #5b6b78;
-  --accent: #2c55e0;
+  --surface-2: #f2f5f7;
+  --line: #d6dde3;
+  --ink: #1e1b19;
+  --muted: #5e6770;
+  --accent: #ad5d1c;
   --accent-ink: #ffffff;
-  --accent-soft: #dfe6fc;
+  --accent-soft: #f5e5d5;
+  --hero: #1e1b19;
+  --hero-ink: #f6f2ed;
+  --hero-muted: #b4aaa0;
+  --hero-line: #3b3531;
+  --tan: #d68a45;
   --calm: #23845a;
   --calm-soft: #dcf1e6;
   --mild: #a8700a;
   --mild-soft: #f8ecd2;
   --upset: #c23c2c;
   --upset-soft: #f8dfdb;
-  --overlay: #0f1922;
-  --overlay-ink: #eef3f7;
+  --overlay: #1a1715;
+  --overlay-ink: #f6f2ed;
+  --shadow: 0 1px 2px rgba(30, 27, 25, 0.06), 0 6px 20px rgba(30, 27, 25, 0.06);
   --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
   --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
-  --r: 14px;
+  --r: 18px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f161c; --surface: #18222b; --surface-2: #1e2a34; --line: #2b3a46;
-    --ink: #e7eef3; --muted: #93a4b1; --accent: #7d9bff; --accent-ink: #0d1530; --accent-soft: #233056;
+    --bg: #111214; --surface: #1b1d20; --surface-2: #24272b; --line: #32363b;
+    --ink: #ede9e4; --muted: #9ba2a9; --accent: #e39a57; --accent-ink: #1e1205; --accent-soft: #3a2a1c;
+    --hero: #272220; --hero-ink: #f6f2ed; --hero-muted: #b4aaa0; --hero-line: #3f3834; --tan: #e39a57;
     --calm: #5ccf97; --calm-soft: #17352a; --mild: #e8b44c; --mild-soft: #3a2f17;
-    --upset: #ff8a7a; --upset-soft: #432420; --overlay: #070c10; --overlay-ink: #eef3f7;
+    --upset: #ff8a7a; --upset-soft: #432420; --overlay: #0d0c0b; --overlay-ink: #f6f2ed;
+    --shadow: none;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0f161c; --surface: #18222b; --surface-2: #1e2a34; --line: #2b3a46;
-  --ink: #e7eef3; --muted: #93a4b1; --accent: #7d9bff; --accent-ink: #0d1530; --accent-soft: #233056;
+  --bg: #111214; --surface: #1b1d20; --surface-2: #24272b; --line: #32363b;
+  --ink: #ede9e4; --muted: #9ba2a9; --accent: #e39a57; --accent-ink: #1e1205; --accent-soft: #3a2a1c;
+  --hero: #272220; --hero-ink: #f6f2ed; --hero-muted: #b4aaa0; --hero-line: #3f3834; --tan: #e39a57;
   --calm: #5ccf97; --calm-soft: #17352a; --mild: #e8b44c; --mild-soft: #3a2f17;
-  --upset: #ff8a7a; --upset-soft: #432420; --overlay: #070c10; --overlay-ink: #eef3f7;
+  --upset: #ff8a7a; --upset-soft: #432420; --overlay: #0d0c0b; --overlay-ink: #f6f2ed;
+  --shadow: none;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -71,20 +82,40 @@ p { margin: 0; }
 .eyebrow { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
 .muted { color: var(--muted); }
 .small { font-size: 0.88rem; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 button, input, select, textarea { font: inherit; color: inherit; }
+/* iPhones zoom into any text field under 16px when it's tapped */
+input, select, textarea { font-size: 16px !important; }
 button { cursor: pointer; }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 .top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 .notice { background: var(--mild-soft); color: var(--ink); border-radius: var(--r); padding: 10px 14px; font-size: 0.9rem; }
 
-.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.stat { background: var(--surface); border-radius: var(--r); padding: 12px; display: grid; gap: 2px; min-width: 0; }
-.stat b { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.stat.lead { background: var(--accent); color: var(--accent-ink); }
-.stat.lead .eyebrow { color: inherit; opacity: 0.85; }
 
-.card { background: var(--surface); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; }
+.card { background: var(--surface); border-radius: var(--r); padding: 18px; display: grid; gap: 12px; box-shadow: var(--shadow); }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.hint-toggle { background: none; border: 0; color: var(--accent); font-weight: 700; font-size: 0.85rem; padding: 4px 0; }
+
+.hero { background: var(--hero); color: var(--hero-ink); border-radius: 24px; padding: 18px 18px 16px; display: grid; gap: 16px; }
+.hero-top { display: flex; align-items: center; gap: 12px; }
+.logo { width: 44px; height: 44px; border-radius: 12px; flex: none; }
+.hero .eyebrow { color: var(--hero-muted); }
+.hero h1 { font-size: 1.55rem; }
+.hero-main { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.hero-big { display: grid; gap: 2px; }
+.hero-big b { font-family: var(--font-display); font-size: 3.2rem; line-height: 1; font-weight: 800; letter-spacing: -0.03em; color: var(--tan); font-variant-numeric: tabular-nums; }
+.hero-big span.sub { color: var(--hero-muted); font-size: 0.9rem; }
+.hero-stats { display: flex; gap: 18px; }
+.hero-stats div { display: grid; gap: 1px; }
+.hero-stats span { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--hero-muted); font-weight: 700; }
+.hero-stats b { font-family: var(--font-display); font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.segments { display: flex; gap: 4px; }
+.segments i { flex: 1; height: 6px; border-radius: 3px; background: var(--hero-line); }
+.segments i.calm { background: var(--calm); }
+.segments i.mild { background: var(--mild); }
+.segments i.upset { background: var(--upset); }
+.segments i.skip { background: var(--hero-muted); opacity: 0.4; }
 .why { font-size: 0.92rem; color: var(--muted); }
 
 .cues { display: grid; gap: 8px; }
@@ -93,13 +124,21 @@ button { cursor: pointer; }
 .cue-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 0.85rem; }
 
-.reps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; border-top: 1px dashed var(--line); }
-.rep { display: grid; grid-template-columns: 2rem 1fr auto; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line); }
-.rep .idx { font-family: var(--font-display); color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
-.rep .dur { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.rep .sub { font-size: 0.82rem; color: var(--muted); }
-.rep.next { background: var(--accent-soft); margin-inline: -16px; padding-inline: 16px; border-radius: 10px; border-bottom-color: transparent; }
-.rep.top .dur::after { content: "longest"; font-family: var(--font-body); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-left: 8px; vertical-align: middle; }
+.reps { list-style: none; margin: 0; padding: 0; display: grid; position: relative; }
+.reps::before { content: ""; position: absolute; left: 15px; top: 18px; bottom: 18px; width: 2px; background: var(--line); }
+.rep { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 12px; padding: 8px 0; position: relative; }
+.rep .idx { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 2px solid var(--line); font-family: var(--font-display); font-size: 0.85rem; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; position: relative; }
+.rep.r-calm .idx { background: var(--calm); border-color: var(--calm); color: var(--surface); }
+.rep.r-mild .idx { background: var(--mild); border-color: var(--mild); color: var(--surface); }
+.rep.r-upset .idx { background: var(--upset); border-color: var(--upset); color: var(--surface); }
+.rep.r-skip .idx { border-style: dashed; }
+.rep.next .idx { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.rep .dur { font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rep .len { height: 4px; border-radius: 2px; background: var(--surface-2); margin-top: 4px; overflow: hidden; max-width: 160px; }
+.rep .len i { display: block; height: 100%; background: var(--line); border-radius: 2px; }
+.rep.next .len i, .rep.top .len i { background: var(--tan); }
+.rep .sub { font-size: 0.82rem; color: var(--muted); margin-top: 3px; }
+.rep.top .dur::after { content: "longest"; font-family: var(--font-body); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-left: 8px; vertical-align: middle; }
 .pill { border-radius: 999px; padding: 3px 10px; font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
 .pill.calm { background: var(--calm-soft); color: var(--calm); }
 .pill.mild { background: var(--mild-soft); color: var(--mild); }
@@ -155,8 +194,9 @@ label.field span.muted { font-weight: 400; }
   padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px));
 }
 .tabs nav { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); }
-.tabs button { background: none; border: 0; padding: 14px 4px; font-weight: 700; color: var(--muted); border-top: 3px solid transparent; }
-.tabs button[aria-current="page"] { color: var(--accent); border-top-color: var(--accent); }
+.tabs button { background: none; border: 0; padding: 8px 4px 10px; font-weight: 700; font-size: 0.78rem; color: var(--muted); display: grid; justify-items: center; gap: 3px; }
+.tabs button svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.tabs button[aria-current="page"] { color: var(--accent); }
 
 /* Timer overlay */
 .overlay {
@@ -164,27 +204,32 @@ label.field span.muted { font-weight: 400; }
   display: grid; align-content: center; justify-items: center; gap: 22px; text-align: center;
   padding: calc(24px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
 }
-.overlay .eyebrow { color: #9fb2c2; }
+.overlay .eyebrow { color: #b4aaa0; }
 .ring { width: min(72vw, 300px); max-width: 100%; aspect-ratio: 1; position: relative; }
 .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .ring .clock { position: absolute; inset: 0; display: grid; place-content: center; gap: 4px; }
 .ring .clock b { font-family: var(--font-display); font-size: clamp(2.6rem, 14vw, 4.2rem); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-.overlay .btn.quiet { background: #223240; color: var(--overlay-ink); }
+.overlay .btn.quiet { background: #36302c; color: var(--overlay-ink); }
 .outcome { width: min(100%, 420px); display: grid; gap: 10px; text-align: left; }
-.outcome button.res { border: 2px solid transparent; border-radius: 14px; padding: 14px 16px; text-align: left; display: grid; gap: 2px; background: #1b2834; color: var(--overlay-ink); }
+.outcome button.res { border: 2px solid transparent; border-radius: 14px; padding: 14px 16px; text-align: left; display: grid; gap: 2px; background: #29241f; color: var(--overlay-ink); }
 .outcome button.res b { font-family: var(--font-display); font-size: 1.15rem; }
-.outcome button.res span { font-size: 0.85rem; color: #a9bac8; }
+.outcome button.res span { font-size: 0.85rem; color: #b4aaa0; }
 .outcome button.res.calm b { color: #5ccf97; }
 .outcome button.res.mild b { color: #e8b44c; }
 .outcome button.res.upset b { color: #ff8a7a; }
 .outcome button.res[aria-pressed="true"] { border-color: currentColor; }
-.outcome input { background: #1b2834; border-color: #2c3d4c; color: var(--overlay-ink); }
+.outcome input { background: #29241f; border-color: #3f3834; color: var(--overlay-ink); }
 .stages { display: grid; gap: 8px; }
 .stages button { text-align: left; border: 1.5px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
 .stages button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .stages b { font-family: var(--font-display); font-size: 1.05rem; }
 .stages span { font-size: 0.85rem; color: var(--muted); }
 .stage-tag { display: inline-block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 2px 7px; }
+.insight { display: grid; grid-template-columns: 6.5rem 1fr 3.2rem; align-items: center; gap: 10px; font-size: 0.9rem; }
+.insight .track { height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; display: flex; }
+.insight .track i { display: block; height: 100%; }
+.insight b { font-variant-numeric: tabular-nums; text-align: right; }
+.download { color: var(--accent); font-weight: 700; text-decoration: none; }
 details summary { cursor: pointer; font-weight: 700; }
 details[open] summary { margin-bottom: 8px; }
 .prose { display: grid; gap: 8px; font-size: 0.93rem; }
@@ -198,9 +243,9 @@ details[open] summary { margin-bottom: 8px; }
 </div>
 <div class="tabs" id="tabs" hidden>
   <nav aria-label="Sections">
-    <button data-tab="today" aria-current="page">Today</button>
-    <button data-tab="history">History</button>
-    <button data-tab="settings">Settings</button>
+    <button data-tab="today" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Today</button>
+    <button data-tab="history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15l4-5 3 3 5-7"/></svg>History</button>
+    <button data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Settings</button>
   </nav>
 </div>
 <div class="overlay" id="overlay" hidden></div>
@@ -215,6 +260,7 @@ import * as P from "/plan.js";
   };
   const state = {
     tab: "today", config: null, configLoaded: false, sessions: new Map(),
+    hints: (() => { try { return JSON.parse(localStorage.getItem("yeti-hints") || "{}"); } catch (e) { return {}; } })(),
     me: null, authChecked: false, offline: false, trainAnyway: false, ignoreUpset: false, timer: null, openHistory: new Set(),
   };
 
@@ -234,6 +280,13 @@ import * as P from "/plan.js";
     txt.replace(/(\d+(?:\.\d+)?)\s*(h|m|min|s|sec)?/g, (_, n, u) => { matched = true; total += +n * (u === "h" ? 3600 : u && u.startsWith("m") ? 60 : u ? 1 : 1); });
     return matched && total > 0 ? Math.round(total) : null;
   }
+  const timeOf = ts => (ts ? new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "");
+  // Collapsible instructions: closed unless opened, and the choice sticks on this phone.
+  function hint(key, label, body) {
+    const open = !!state.hints[key];
+    return `<button type="button" class="hint-toggle" data-act="toggle-hint" data-k="${key}" aria-expanded="${open}">${open ? "Hide" : label}</button>${open ? `<div class="small muted">${body}</div>` : ""}`;
+  }
+
   // ---------- the training logic (see plan.js) ----------
   const { STAGES, REST_BETWEEN, fmt, roundDur, doneReps, sessionMode, buildPlan: planFor, pickCues } = P;
   const dog = () => P.dogName(state.config);
@@ -362,7 +415,7 @@ import * as P from "/plan.js";
     let lastName = "";
     try { lastName = localStorage.getItem("yeti-name") || ""; } catch (e) {}
     return `
-      <div class="top"><div><p class="eyebrow">Separation training</p><h1>Log in</h1></div></div>
+      <div class="top"><div class="hero-top"><img class="logo" src="/icon-192.png" alt="" style="width:56px;height:56px;border-radius:16px"><div><p class="eyebrow">Separation training</p><h1>Log in</h1></div></div></div>
       <form class="card" id="login-form">
         <label class="field">Your name<span class="muted small">Shows in the history next to the reps you do.</span><input type="text" id="login-name" value="${esc(lastName)}" autocomplete="nickname" maxlength="40" required></label>
         <label class="field">Household password<input type="password" id="login-pass" autocomplete="current-password" required></label>
@@ -439,7 +492,8 @@ import * as P from "/plan.js";
     const allDone = nextIdx === -1;
     const estMin = Math.round((plan.reduce((a, b) => a + b, 0) + REST_BETWEEN * (plan.length - 1)) / 60);
     const rest = !s && restSuggested() && !state.trainAnyway;
-    const topIdx = plan.indexOf(Math.max(...plan));
+    const maxTarget = Math.max(...plan);
+    const topIdx = plan.indexOf(maxTarget);
 
     let banner = "";
     if (rest) {
@@ -461,38 +515,41 @@ import * as P from "/plan.js";
       if (r) right = r.result === "skip" ? `<span class="pill skip">Skipped</span>` : `<span class="pill ${r.result}">${RESULTS[r.result].label}${r.actual && r.actual < r.target ? ` · ${fmt(r.actual)}` : ""}</span>`;
       else if (i === nextIdx && !rest) right = `<button class="btn sm" data-act="start" data-i="${i}">Start</button>`;
       else right = `<span class="small muted">to do</span>`;
-      const sub = r && r.by ? `<div class="sub">${esc(personName(r.by))}${r.note ? " · " + esc(r.note) : ""}</div>` : i === nextIdx && !rest ? `<div class="sub">Up next</div>` : "";
-      return `<li class="rep${i === nextIdx && !rest ? " next" : ""}${i === topIdx ? " top" : ""}"><span class="idx">${i + 1}</span><div><div class="dur">${fmt(target)}</div>${sub}</div>${right}</li>`;
+      const sub = r && r.by ? `<div class="sub">${esc(personName(r.by))}${r.at ? " · " + timeOf(r.at) : ""}${r.note ? " · " + esc(r.note) : ""}</div>` : i === nextIdx && !rest ? `<div class="sub">Up next</div>` : "";
+      const cls = ["rep", r ? "r-" + r.result : "", i === nextIdx && !rest ? "next" : "", i === topIdx ? "top" : ""].filter(Boolean).join(" ");
+      return `<li class="${cls}"><span class="idx">${i + 1}</span><div><div class="dur">${fmt(target)}</div><div class="len"><i style="width:${Math.max(4, (target / maxTarget) * 100).toFixed(0)}%"></i></div>${sub}</div>${right}</li>`;
     }).join("");
 
     return `
-      <div class="top">
-        <div><p class="eyebrow">${esc(niceDate(t))}</p><h1>${esc(dog())}'s plan today</h1></div>
-        <span class="stage-tag">${esc(STAGES[mode].label)}</span>
-      </div>
-      <div class="stats">
-        <div class="stat lead"><span class="eyebrow">Longest rep</span><b>${fmt(w)}</b></div>
-        <div class="stat"><span class="eyebrow">Best calm</span><b>${bestCalmEver(mode) ? fmt(bestCalmEver(mode)) : "–"}</b></div>
-        <div class="stat"><span class="eyebrow">Last 7 days</span><b>${weekCount()}/${state.config.perWeek || 5}</b></div>
-      </div>
+      <header class="hero">
+        <div class="hero-top"><img class="logo" src="/icon-192.png" alt=""><div><p class="eyebrow">${esc(niceDate(t, { weekday: "short", day: "numeric", month: "short" }))} · ${esc(STAGES[mode].label)}</p><h1>${esc(dog())}'s plan today</h1></div></div>
+        <div class="hero-main">
+          <div class="hero-big"><span class="eyebrow">Longest rep</span><b>${fmt(w)}</b><span class="sub">${plan.length} reps · about ${estMin} min</span></div>
+          <div class="hero-stats">
+            <div><span>Best calm</span><b>${bestCalmEver(mode) ? fmt(bestCalmEver(mode)) : "–"}</b></div>
+            <div><span>7 days</span><b>${weekCount()}/${state.config.perWeek || 5}</b></div>
+          </div>
+        </div>
+        <div class="segments" aria-label="Reps done today">${plan.map((_, i) => { const r = repFor(i); return `<i class="${r ? r.result : ""}"></i>`; }).join("")}</div>
+      </header>
       ${banner}
       <div class="card">
         <div><h2>Before you start</h2><p class="why">${esc(s ? s.why : computed.why)}</p></div>
         <div class="cues">
-          <p class="small">Departure cues: do each one 5 times, then sit back down. Don't leave. This takes the meaning out of the signals ${esc(dog())} watches for.</p>
+          <div>${hint("cues", "Why departure cues?", `Do each one 5 times, then sit back down. Don't leave. This takes the meaning out of the signals ${esc(dog())} watches for.`)}</div>
           <div class="cue-list">${cues.map(c => `<span class="chip">${esc(c)}</span>`).join("")}</div>
           <label class="check"><input type="checkbox" id="cues-done" ${s && s.cuesDone ? "checked" : ""} ${rest ? "disabled" : ""}> Cues done</label>
         </div>
       </div>
       <div class="card">
-        <div class="row" style="justify-content:space-between"><h2>Reps</h2><span class="small muted num">${plan.length} reps · about ${estMin} min</span></div>
-        <p class="small muted">${mode === "gate"
+        <div class="card-head"><h2>Reps</h2></div>
+        <div>${hint("reps", "How to do the reps", `${mode === "gate"
           ? `Close the gate with ${esc(dog())} on the other side and go out of sight: another room, or round a corner. Come back when the timer ends.`
-          : `Head out through both doors and tap "I'm out" once they're shut. The timer starts then. Come back when it ends.`} Come back early if ${esc(dog())} starts to stress. Between reps, sit calmly for 1–2 minutes until ${esc(dog())} settles.</p>
+          : `Head out through both doors and tap "I'm out" once they're shut. The timer starts then. Come back when it ends.`} Come back early if ${esc(dog())} starts to stress. Between reps, sit calmly for 1–2 minutes until ${esc(dog())} settles.`)}</div>
         <ol class="reps">${repRows}</ol>
         ${!rest ? `<div class="row"><button class="btn sm ghost" data-act="add-rep">Add a rep</button><input type="text" id="extra-dur" placeholder="e.g. 45s" style="width:8rem" autocomplete="off"></div>` : ""}
       </div>
-      ${s ? `<div class="card"><label class="field">Notes for today<span class="muted small">What you noticed: triggers, what helped, who was home.</span><textarea id="notes">${esc(s.notes || "")}</textarea></label></div>` : ""}
+      ${s ? `<div class="card"><label class="field">Notes for today<textarea id="notes" placeholder="What you noticed: triggers, what helped, who was home">${esc(s.notes || "")}</textarea></label></div>` : ""}
     `;
   }
 
@@ -506,7 +563,32 @@ import * as P from "/plan.js";
         ${list.some(s => sessionMode(s) === curMode()) ? chart(list.filter(s => sessionMode(s) === curMode()).reverse()) : `<p class="small muted">No sessions in this stage yet.</p>`}
         <div class="legend"><span><i style="background:var(--accent)"></i>Longest planned rep</span><span><i style="background:var(--calm)"></i>Longest calm rep</span><span><i style="background:var(--upset)"></i>Got upset</span></div>
       </div>
-      ${list.map(sessionCard).join("")}`;
+      ${insightsCard(list)}
+      ${list.map(sessionCard).join("")}
+      <p class="small muted" style="text-align:center"><a class="download" href="/api/export">Download all data (CSV)</a> · opens in Excel or Google Sheets</p>`;
+  }
+
+  // Calm share of reps by time of day and by person, from each rep's saved time.
+  function insightsCard(list) {
+    const reps = list.flatMap(s => doneReps(s).map(r => ({ ...r, date: s.date })));
+    if (!reps.length) return "";
+    const part = ts => { const h = new Date(ts).getHours(); return h < 5 ? "Night" : h < 12 ? "Morning" : h < 17 ? "Afternoon" : h < 22 ? "Evening" : "Night"; };
+    const group = (keyFn, order) => {
+      const g = new Map();
+      for (const r of reps) { const k = keyFn(r); if (!k) continue; const x = g.get(k) || { calm: 0, mild: 0, upset: 0, n: 0 }; x[r.result]++; x.n++; g.set(k, x); }
+      return [...g.entries()].sort((a, b) => (order ? order.indexOf(a[0]) - order.indexOf(b[0]) : b[1].n - a[1].n));
+    };
+    const rows = entries => entries.map(([k, x]) => `<div class="insight"><span>${esc(k)} <span class="muted small">${x.n}</span></span>
+      <div class="track" role="img" aria-label="${Math.round((x.calm / x.n) * 100)}% calm"><i style="width:${(x.calm / x.n) * 100}%;background:var(--calm)"></i><i style="width:${(x.mild / x.n) * 100}%;background:var(--mild)"></i><i style="width:${(x.upset / x.n) * 100}%;background:var(--upset)"></i></div>
+      <b>${Math.round((x.calm / x.n) * 100)}%</b></div>`).join("");
+    const byTime = group(r => r.at && part(r.at), ["Morning", "Afternoon", "Evening", "Night"]);
+    const byWho = group(r => r.by && personName(r.by));
+    return `<div class="card">
+      <div class="card-head"><h2>What works best</h2><span class="small muted">% calm reps</span></div>
+      <div class="eyebrow">Time of day</div>${rows(byTime)}
+      ${byWho.length > 1 ? `<div class="eyebrow">Who trained</div>${rows(byWho)}` : ""}
+      ${reps.length < 20 ? `<p class="small muted">Only ${reps.length} reps so far. Give it a couple of weeks before reading much into this.</p>` : ""}
+    </div>`;
   }
 
   function sessionCard(s) {
@@ -516,8 +598,8 @@ import * as P from "/plan.js";
     const who = [...new Set(done.map(r => r.by).filter(Boolean))];
     const open = state.openHistory.has(s.date);
     return `<div class="session">
-      <div class="session-head"><b>${esc(niceDate(s.date, { weekday: "short", day: "numeric", month: "short" }))} <span class="stage-tag">${sessionMode(s) === "gate" ? "Gate" : "Door"}</span></b><span class="small muted num">Longest ${fmt(s.working)}${best ? ` · best calm ${fmt(best)}` : ""}</span></div>
-      <div class="dots">${done.map(r => `<span class="dot ${r.result === "skip" ? "none" : r.result}" title="${r.result === "skip" ? "Skipped" : RESULTS[r.result].label}">${fmt(r.actual || r.target)}</span>`).join("")}</div>
+      <div class="session-head"><b>${esc(niceDate(s.date, { weekday: "short", day: "numeric", month: "short" }))} <span class="stage-tag">${sessionMode(s) === "gate" ? "Gate" : "Door"}</span></b><span class="small muted num">${done.some(r => r.at) ? timeOf(Math.min(...done.filter(r => r.at).map(r => r.at))) + " · " : ""}Longest ${fmt(s.working)}${best ? ` · best calm ${fmt(best)}` : ""}</span></div>
+      <div class="dots">${done.map(r => `<span class="dot ${r.result === "skip" ? "none" : r.result}" title="${r.result === "skip" ? "Skipped" : RESULTS[r.result].label}${r.at ? " at " + timeOf(r.at) : ""}">${fmt(r.actual || r.target)}</span>`).join("")}</div>
       <div class="row" style="justify-content:space-between">
         <div class="row">${who.map(name => `<span class="who">${esc(personName(name))}</span>`).join("")}</div>
         ${s.notes || done.some(r => r.note) ? `<button class="btn sm quiet" data-act="toggle-hist" data-d="${s.date}">${open ? "Hide notes" : "Notes"}</button>` : ""}
@@ -715,7 +797,7 @@ import * as P from "/plan.js";
       if (!overlay.querySelector("#t-out")) {
         overlay.innerHTML = `
           <div><p class="eyebrow">Rep ${tm.i + 1} · ${fmt(tm.target)}</p><h2 style="margin-top:6px">Head out through both doors</h2></div>
-          <p class="small" style="color:#a9bac8;max-width:28rem">Tap "I'm out" once both doors are shut behind you. The timer starts then.</p>
+          <p class="small" style="color:#b4aaa0;max-width:28rem">Tap "I'm out" once both doors are shut behind you. The timer starts then.</p>
           <div class="row" style="justify-content:center"><button class="btn" id="t-out">I'm out</button><button class="btn quiet" id="t-cancel">Cancel rep</button></div>`;
         overlay.querySelector("#t-out").onclick = () => { tm.phase = "run"; tm.start = Date.now(); overlay.innerHTML = ""; drawTimer(); };
         overlay.querySelector("#t-cancel").onclick = closeTimer;
@@ -729,9 +811,9 @@ import * as P from "/plan.js";
     if (!overlay.querySelector(".ring")) {
       overlay.innerHTML = `
         <div><p class="eyebrow">Rep ${tm.i + 1} · ${fmt(tm.target)}</p><h2 style="margin-top:6px">${tm.door ? "You're out. Stay out" : "Close the gate and go out of sight"}</h2></div>
-        <div class="ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="none" stroke="#223240" stroke-width="6"/><circle id="ring-fg" cx="50" cy="50" r="46" fill="none" stroke="#7d9bff" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="0"/></svg>
-          <div class="clock"><b id="t-left" class="num">${clock(left)}</b><span class="small" style="color:#9fb2c2">left</span></div></div>
-        <p class="small" style="color:#a9bac8;max-width:28rem">Come back in when it beeps. If ${esc(dog())} starts to stress, come back right away and end the rep.</p>
+        <div class="ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="none" stroke="#36302c" stroke-width="6"/><circle id="ring-fg" cx="50" cy="50" r="46" fill="none" stroke="#e39a57" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="0"/></svg>
+          <div class="clock"><b id="t-left" class="num">${clock(left)}</b><span class="small" style="color:#b4aaa0">left</span></div></div>
+        <p class="small" style="color:#b4aaa0;max-width:28rem">Come back in when it beeps. If ${esc(dog())} starts to stress, come back right away and end the rep.</p>
         <div class="row" style="justify-content:center"><button class="btn" id="t-early">I came back early</button><button class="btn quiet" id="t-cancel">Cancel rep</button></div>`;
       overlay.querySelector("#t-early").onclick = () => finishTimer(Math.round((Date.now() - tm.start) / 1000));
       overlay.querySelector("#t-cancel").onclick = closeTimer;
@@ -761,7 +843,7 @@ import * as P from "/plan.js";
   function recordRep(result, note) {
     const tm = state.timer, t = todayStr();
     const s = state.sessions.get(t) || ensureToday();
-    const reps = (s.reps || []).filter(r => r.i !== tm.i).concat([{ i: tm.i, target: tm.target, actual: result === "skip" ? 0 : tm.actual, result, note, by: state.me, at: Date.now() }]);
+    const reps = (s.reps || []).filter(r => r.i !== tm.i).concat([{ i: tm.i, target: tm.target, actual: result === "skip" ? 0 : tm.actual, result, note, by: state.me, startedAt: tm.start, at: Date.now() }]);
     if (result === "upset") state.ignoreUpset = false;
     saveSession(t, { reps });
     closeTimer();
@@ -787,6 +869,11 @@ import * as P from "/plan.js";
     const act = b.dataset.act, t = todayStr();
     if (act === "start") startRep(+b.dataset.i);
     else if (act === "logout") { api("/api/logout", { method: "POST" }).catch(() => {}).finally(() => { state.me = null; state.configLoaded = false; lastSnapshot = ""; render(); }); }
+    else if (act === "toggle-hint") {
+      state.hints[b.dataset.k] = !state.hints[b.dataset.k];
+      try { localStorage.setItem("yeti-hints", JSON.stringify(state.hints)); } catch (e) {}
+      render();
+    }
     else if (act === "push-on") turnOnPush();
     else if (act === "push-off") turnOffPush();
     else if (act === "push-test") testPush();
