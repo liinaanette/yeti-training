@@ -32,6 +32,32 @@ export async function db() {
         data jsonb NOT NULL,
         updated_at timestamptz NOT NULL DEFAULT now()
       )`;
+      await sql`CREATE TABLE IF NOT EXISTS reps (
+        date text NOT NULL,
+        i integer NOT NULL,
+        data jsonb NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (date, i)
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS absences (
+        id text PRIMARY KEY,
+        data jsonb NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS login_attempts (
+        ip text NOT NULL,
+        at timestamptz NOT NULL DEFAULT now()
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS login_attempts_ip_at ON login_attempts (ip, at)`;
+      // Reps used to live inside each session as one array, where two phones could overwrite
+      // each other. Move any old ones into their own rows (one row per rep), once.
+      await sql.transaction([
+        sql`INSERT INTO reps (date, i, data)
+          SELECT s.date, (r->>'i')::int, r FROM sessions s, jsonb_array_elements(s.data->'reps') r
+          WHERE jsonb_typeof(s.data->'reps') = 'array' AND r ? 'i'
+          ON CONFLICT DO NOTHING`,
+        sql`UPDATE sessions SET data = data - 'reps' WHERE data ? 'reps'`,
+      ]);
     })().catch(err => {
       ready = null;
       throw err;
@@ -99,4 +125,25 @@ export const isPlainObject = v => v !== null && typeof v === "object" && !Array.
 
 export function pushConfigured() {
   return !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+}
+
+export const RESULTS = ["calm", "mild", "upset", "skip"];
+export const isDate = v => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+// Everything the app and the reminder job need, with each session's reps attached.
+export async function loadAll(sql) {
+  const [config] = await sql`SELECT data FROM config WHERE id = 'main'`;
+  const sessionRows = await sql`SELECT date, data FROM sessions ORDER BY date`;
+  const repRows = await sql`SELECT date, data FROM reps ORDER BY date, i`;
+  const absenceRows = await sql`SELECT data FROM absences`;
+  const byDate = new Map(sessionRows.map(r => [r.date, { ...r.data, date: r.date, reps: [] }]));
+  for (const r of repRows) {
+    if (!byDate.has(r.date)) byDate.set(r.date, { date: r.date, reps: [] });
+    byDate.get(r.date).reps.push(r.data);
+  }
+  return {
+    config: config ? config.data : null,
+    sessions: [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
+    absences: absenceRows.map(r => r.data).sort((a, b) => (a.start || 0) - (b.start || 0)),
+  };
 }

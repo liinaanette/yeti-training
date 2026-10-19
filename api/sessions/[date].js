@@ -1,8 +1,8 @@
 import { allow, checkEnv, db, isPlainObject, requireUser } from "../_lib.js";
 
-// PATCH merges top-level fields into the day's session.
+// PATCH merges top-level fields (plan, notes, cues...) into the day's session.
 // With create: true, fields already saved by the other person win, so two phones
-// opening the same day can't wipe each other's reps.
+// opening the same day can't wipe each other's plan or notes.
 export default async function handler(req, res) {
   if (!allow(req, res, "PATCH") || !checkEnv(res) || !requireUser(req, res)) return;
   const date = String(req.query.date || "");
@@ -10,6 +10,7 @@ export default async function handler(req, res) {
   const patch = req.body && req.body.patch;
   if (!isPlainObject(patch)) return res.status(400).json({ error: "Send the change as { patch: {...} }." });
   delete patch.date;
+  delete patch.reps; // reps are saved one by one through /api/reps
   const sql = await db();
   const json = JSON.stringify(patch);
   const [row] = req.body.create

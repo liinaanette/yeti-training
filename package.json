@@ -8,5 +8,8 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.0.0",
     "web-push": "^3.6.7"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
   }
 }

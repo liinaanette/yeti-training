@@ -69,7 +69,8 @@ export function nextAfter(s, dog) {
   return { w: prev, why: "Last session didn't get through the longest rep, so today repeats the same level." };
 }
 
-export function computeWorking(config, sessions, today, mode = curMode(config)) {
+// absences: real times alone outside training ({ date, seconds, result }), oldest first.
+export function computeWorking(config, sessions, today, mode = curMode(config), absences = []) {
   const base = getBase(config, mode) || { seconds: STAGES[mode].defaultStart, setOn: today, setAt: 0 };
   const past = [...sessions.values()]
     .filter(s => s.date < today && doneReps(s).length && sessionMode(s) === mode)
@@ -80,9 +81,16 @@ export function computeWorking(config, sessions, today, mode = curMode(config)) 
   }
   let { w, why } = nextAfter(last, dogName(config));
   const gap = daysBetween(last.date, today);
-  if (gap >= 4) { w *= 0.85; why += ` It's been ${gap} days, so it's a little easier.`; }
+  // The longer the break, the further back the next session starts.
+  const breakFactor = gap >= 14 ? 0.5 : gap >= 7 ? 0.7 : gap >= 4 ? 0.85 : 1;
+  if (breakFactor < 1) { w *= breakFactor; why += ` It's been ${gap} days, so today starts at ${Math.round(breakFactor * 100)}% to warm back up.`; }
+  // Struggling when really left alone since the last session also sets things back a bit.
+  const rough = absences.filter(a => a.date >= last.date && a.date < today && a.result === "upset");
+  if (rough.length) { w *= 0.75; why += ` ${dogName(config)} struggled when left alone on ${shortDay(rough[rough.length - 1].date)}, so it's easier today.`; }
   return { w: roundDur(Math.max(3, w)), why };
 }
+
+const shortDay = date => new Date(date + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
 
 export function buildPlan(config, w, date) {
   const cap = ((config && config.capMin) || 30) * 60;
@@ -115,10 +123,10 @@ export function bestCalmEver(sessions, mode) {
 }
 
 // Today's plan in one object, as the Today tab would show it.
-export function todaySummary(config, sessions, today) {
+export function todaySummary(config, sessions, today, absences = []) {
   const s = sessions.get(today);
   const mode = s ? sessionMode(s) : curMode(config);
-  const w = s ? s.working : computeWorking(config, sessions, today, mode).w;
+  const w = s ? s.working : computeWorking(config, sessions, today, mode, absences).w;
   const plan = s ? s.plan : buildPlan(config, w, today);
   const minutes = Math.round((plan.reduce((a, b) => a + b, 0) + REST_BETWEEN * (plan.length - 1)) / 60);
   return {
@@ -126,4 +134,34 @@ export function todaySummary(config, sessions, today) {
     rest: !s && restSuggested(config, sessions, today),
     started: !!(s && doneReps(s).length),
   };
+}
+
+// The last 7 days, ending today: what the weekly summary notification and card show.
+export function weeklySummary(config, sessions, today, absences = []) {
+  const from = addDays(today, -6);
+  const week = [...sessions.values()].filter(s => s.date >= from && s.date <= today && doneReps(s).length).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const reps = week.flatMap(doneReps);
+  const calm = reps.filter(r => r.result === "calm");
+  const mode = curMode(config);
+  const inStage = week.filter(s => sessionMode(s) === mode);
+  const prevStage = [...sessions.values()].filter(s => s.date < from && sessionMode(s) === mode && doneReps(s).length).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  return {
+    from, to: today, mode,
+    sessions: week.length,
+    reps: reps.length,
+    calmPct: reps.length ? Math.round((calm.length / reps.length) * 100) : null,
+    bestCalm: calm.length ? Math.max(...calm.map(r => r.actual || r.target)) : 0,
+    levelFrom: prevStage ? prevStage.working : inStage.length ? inStage[0].working : null,
+    levelTo: inStage.length ? inStage[inStage.length - 1].working : null,
+    absences: absences.filter(a => a.date >= from && a.date <= today).length,
+  };
+}
+
+export function weeklyText(config, w) {
+  const dog = dogName(config);
+  if (!w.sessions) return { title: `${dog}'s week`, body: "No training sessions this week. Tomorrow is a good day to start again, a little easier." };
+  const level = w.levelFrom && w.levelTo
+    ? (w.levelTo > w.levelFrom ? ` Longest rep went up from ${fmt(w.levelFrom)} to ${fmt(w.levelTo)}.` : w.levelTo < w.levelFrom ? ` Longest rep is ${fmt(w.levelTo)}, down from ${fmt(w.levelFrom)}. That's normal, progress isn't a straight line.` : ` Longest rep held at ${fmt(w.levelTo)}.`)
+    : "";
+  return { title: `${dog}'s week`, body: `${w.sessions} session${w.sessions === 1 ? "" : "s"}, ${w.reps} reps, ${w.calmPct}% calm.${level}` };
 }

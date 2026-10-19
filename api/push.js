@@ -35,7 +35,8 @@ export default async function handler(req, res) {
   if (!isPlainObject(sub) || typeof sub.endpoint !== "string" || !sub.endpoint.startsWith("https://")) {
     return res.status(400).json({ error: "Missing push subscription." });
   }
-  const prefs = { morning: body.prefs ? body.prefs.morning !== false : true, evening: body.prefs ? body.prefs.evening !== false : true };
+  const on = key => (body.prefs ? body.prefs[key] !== false : true);
+  const prefs = { morning: on("morning"), evening: on("evening"), weekly: on("weekly") };
   await sql`INSERT INTO push_subs (endpoint, name, sub, prefs) VALUES (${sub.endpoint}, ${name}, ${JSON.stringify(sub)}::jsonb, ${JSON.stringify(prefs)}::jsonb)
     ON CONFLICT (endpoint) DO UPDATE SET name = EXCLUDED.name, sub = EXCLUDED.sub, prefs = EXCLUDED.prefs`;
   res.status(200).json({ subscribed: true, prefs });

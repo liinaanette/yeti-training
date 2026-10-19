@@ -6,15 +6,17 @@ self.addEventListener("push", event => {
     body: data.body || "",
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    tag: "daily-plan",
+    tag: data.tag || "daily-plan",
+    data: { url: data.url || "/" },
   }));
 });
 
 self.addEventListener("notificationclick", event => {
   event.notification.close();
   event.waitUntil((async () => {
+    const url = (event.notification.data && event.notification.data.url) || "/";
     const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    for (const w of wins) if ("focus" in w) return w.focus();
-    return self.clients.openWindow("/");
+    for (const w of wins) if ("focus" in w) { if (url !== "/" && "navigate" in w) await w.navigate(url).catch(() => {}); return w.focus(); }
+    return self.clients.openWindow(url);
   })());
 });
