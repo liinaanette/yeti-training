@@ -232,6 +232,27 @@ label.field span.muted { font-weight: 400; }
 .insight .track i { display: block; height: 100%; }
 .insight b { font-variant-numeric: tabular-nums; text-align: right; }
 .download { color: var(--accent); font-weight: 700; text-decoration: none; }
+.periods { display: flex; flex-wrap: wrap; gap: 6px; }
+.periods button { border: 1.5px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: 0.88rem; }
+.periods button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.report {
+  --bg: #ffffff; --surface: #ffffff; --surface-2: #f2f5f7; --line: #dfe4e8; --ink: #1e1b19; --muted: #5e6770;
+  --accent: #ad5d1c; --accent-soft: #f5e5d5; --tan: #c27632; --calm: #23845a; --calm-soft: #dcf1e6; --mild: #a8700a; --mild-soft: #f8ecd2;
+  --upset: #c23c2c; --upset-soft: #f8dfdb; --shadow: none;
+  background: #ffffff; color: #1e1b19; border-radius: 12px; padding: 22px; display: grid; gap: 18px; color-scheme: light;
+}
+.report .card { box-shadow: none; border: 1px solid var(--line); padding: 14px; }
+.rp-head { display: flex; gap: 12px; align-items: center; border-bottom: 2px solid #1e1b19; padding-bottom: 14px; }
+.rp-head img { width: 52px; height: 52px; border-radius: 12px; }
+.rp-head h2 { font-size: 1.35rem; }
+.rp-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.rp-sum div { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 2px; min-width: 0; }
+.rp-sum b { font-family: var(--font-display); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.rp-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.rp-table th { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border-bottom: 1px solid var(--line); padding: 6px 6px 6px 0; }
+.rp-table td { vertical-align: top; border-bottom: 1px solid var(--line); padding: 8px 6px 8px 0; }
+.rp-table .dots { gap: 3px; }
+.rp-scroll { overflow-x: auto; }
 details summary { cursor: pointer; font-weight: 700; }
 details[open] summary { margin-bottom: 8px; }
 .prose { display: grid; gap: 8px; font-size: 0.93rem; }
@@ -434,9 +455,9 @@ import * as P from "/plan.js";
     const typing = document.activeElement && appEl.contains(document.activeElement) && document.activeElement.matches("input[type=text], input[type=number], input[type=password], textarea");
     if (typing) return; // don't clobber what someone is typing
     document.getElementById("tabs").hidden = !state.config;
-    document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === state.tab ? "page" : "false"));
+    document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === (state.tab === "report" ? "history" : state.tab) ? "page" : "false"));
     if (!state.config) { appEl.innerHTML = setupView(); return bindSetup(); }
-    const view = state.tab === "history" ? historyView() : state.tab === "settings" ? settingsView() : todayView();
+    const view = state.tab === "report" ? reportView() : state.tab === "history" ? historyView() : state.tab === "settings" ? settingsView() : todayView();
     appEl.innerHTML = (state.offline ? `<div class="notice">Can't reach the server right now. Changes may not save until you're back online.</div>` : "") + view;
   }
 
@@ -591,12 +612,13 @@ import * as P from "/plan.js";
     if (!list.length && !state.absences.length) return `<div class="top"><div><p class="eyebrow">History</p><h1>Every session, both of you</h1></div></div><div class="card empty">No sessions yet. Finish a rep on the Today tab and it shows up here, with who trained and how ${esc(dog())} did.</div>`;
     return `
       <div class="top"><div><p class="eyebrow">History</p><h1>Every session, both of you</h1></div></div>
+      ${weekCard()}
+      <button class="btn ghost" data-act="open-report" style="justify-self:start">Report for behaviourist (PDF)</button>
       <div class="card">
         <div class="row" style="justify-content:space-between"><h2>Progress</h2><span class="stage-tag">${esc(STAGES[curMode()].label)}</span></div>
         ${list.some(s => sessionMode(s) === curMode()) ? chart(list.filter(s => sessionMode(s) === curMode()).reverse()) : `<p class="small muted">No sessions in this stage yet.</p>`}
         <div class="legend"><span><i style="background:var(--accent)"></i>Longest planned rep</span><span><i style="background:var(--calm)"></i>Longest calm rep</span><span><i style="background:var(--upset)"></i>Got upset</span></div>
       </div>
-      ${weekCard()}
       ${insightsCard(list)}
       <div class="row" style="justify-content:space-between"><h2>Sessions</h2><button class="btn sm ghost" data-act="log-absence">Log time alone</button></div>
       ${feed.map(f => f.html).join("")}
@@ -604,7 +626,7 @@ import * as P from "/plan.js";
   }
 
   // Calm share of reps by time of day and by person, from each rep's saved time.
-  function insightsCard(list) {
+  function insightsCard(list, realNames = false) {
     const reps = list.flatMap(s => doneReps(s).map(r => ({ ...r, date: s.date })));
     if (!reps.length) return "";
     const part = ts => { const h = new Date(ts).getHours(); return h < 5 ? "Night" : h < 12 ? "Morning" : h < 17 ? "Afternoon" : h < 22 ? "Evening" : "Night"; };
@@ -617,13 +639,157 @@ import * as P from "/plan.js";
       <div class="track" role="img" aria-label="${Math.round((x.calm / x.n) * 100)}% calm"><i style="width:${(x.calm / x.n) * 100}%;background:var(--calm)"></i><i style="width:${(x.mild / x.n) * 100}%;background:var(--mild)"></i><i style="width:${(x.upset / x.n) * 100}%;background:var(--upset)"></i></div>
       <b>${Math.round((x.calm / x.n) * 100)}%</b></div>`).join("");
     const byTime = group(r => r.at && part(r.at), ["Morning", "Afternoon", "Evening", "Night"]);
-    const byWho = group(r => r.by && personName(r.by));
+    const byWho = group(r => r.by && (realNames ? r.by : personName(r.by)));
     return `<div class="card">
       <div class="card-head"><h2>What works best</h2><span class="small muted">% calm reps</span></div>
       <div class="eyebrow">Time of day</div>${rows(byTime)}
       ${byWho.length > 1 ? `<div class="eyebrow">Who trained</div>${rows(byWho)}` : ""}
       ${reps.length < 20 ? `<p class="small muted">Only ${reps.length} reps so far. Give it a couple of weeks before reading much into this.</p>` : ""}
     </div>`;
+  }
+
+  // ---------- report for the behaviourist ----------
+  function reportRange() {
+    const r = state.report || (state.report = { period: "30" });
+    const t = todayStr();
+    const first = [...state.sessions.keys(), ...state.absences.map(a => a.date)].sort()[0] || t;
+    if (r.period === "7") return { from: P.addDays(t, -6), to: t };
+    if (r.period === "30") return { from: P.addDays(t, -29), to: t };
+    if (r.period === "month") return { from: t.slice(0, 8) + "01", to: t };
+    if (r.period === "all") return { from: first, to: t };
+    return { from: r.from || P.addDays(t, -29), to: r.to || t };
+  }
+
+  function reportView() {
+    const r = state.report || (state.report = { period: "30" });
+    const { from, to } = reportRange();
+    const list = [...state.sessions.values()].filter(s => s.date >= from && s.date <= to && doneReps(s).length).sort((a, b) => (a.date < b.date ? -1 : 1));
+    const absences = state.absences.filter(a => a.date >= from && a.date <= to);
+    const reps = list.flatMap(doneReps);
+    const calm = reps.filter(x => x.result === "calm");
+    const trainers = [...new Set(list.flatMap(s => (s.reps || []).map(x => x.by)).filter(Boolean))];
+    const mode = curMode();
+    const inStage = list.filter(s => sessionMode(s) === mode);
+    const range = `${niceDate(from, { day: "numeric", month: "short", year: "numeric" })} – ${niceDate(to, { day: "numeric", month: "short", year: "numeric" })}`;
+    const name = esc;
+    const periods = [["7", "Last 7 days"], ["30", "Last 30 days"], ["month", "This month"], ["all", "Everything"], ["custom", "Custom"]];
+    return `
+      <div class="top"><div><button class="hint-toggle" data-act="back-history">← History</button><h1>Report</h1><p class="small muted">For your behaviourist: pick a period, then save it as a PDF or an image.</p></div></div>
+      <div class="card">
+        <div class="periods">${periods.map(([k, l]) => `<button type="button" data-act="report-period" data-p="${k}" aria-pressed="${r.period === k}">${l}</button>`).join("")}</div>
+        ${r.period === "custom" ? `<div class="row"><label class="field" style="flex:1">From<input type="date" id="rp-from" value="${from}"></label><label class="field" style="flex:1">To<input type="date" id="rp-to" value="${to}"></label></div>` : ""}
+        <div class="row"><button class="btn" data-act="report-pdf" ${state.exporting ? "disabled" : ""}>${state.exporting === "pdf" ? "Making PDF…" : "Save as PDF"}</button><button class="btn ghost" data-act="report-png" ${state.exporting ? "disabled" : ""}>${state.exporting === "png" ? "Making image…" : "Save as image"}</button></div>
+      </div>
+      <div class="report" id="report">
+        <div class="rp-block rp-head"><img src="/icon-192.png" alt=""><div><p class="eyebrow">Separation anxiety training report</p><h2>${esc(dog())} · ${esc(range)}</h2><p class="small muted">Prepared ${esc(niceDate(todayStr(), { day: "numeric", month: "long", year: "numeric" }))}${trainers.length ? ` · Trained by ${trainers.map(name).join(" and ")}` : ""} · Current stage: ${esc(STAGES[mode].label.toLowerCase())}</p></div></div>
+        <div class="rp-block rp-sum">
+          <div><span class="eyebrow">Sessions</span><b>${list.length}</b></div>
+          <div><span class="eyebrow">Reps</span><b>${reps.length}</b></div>
+          <div><span class="eyebrow">Calm reps</span><b>${reps.length ? Math.round((calm.length / reps.length) * 100) + "%" : "–"}</b></div>
+          <div><span class="eyebrow">Longest rep</span><b>${inStage.length ? `${fmt(inStage[0].working)} → ${fmt(inStage[inStage.length - 1].working)}` : "–"}</b></div>
+          <div><span class="eyebrow">Best calm rep</span><b>${calm.length ? fmt(Math.max(...calm.map(x => x.actual || x.target))) : "–"}</b></div>
+          <div><span class="eyebrow">Real absences</span><b>${absences.length}</b></div>
+        </div>
+        ${inStage.length ? `<div class="rp-block"><h3 style="margin-bottom:6px">Longest rep per session · ${esc(STAGES[mode].label.toLowerCase())}</h3>${chart(inStage)}
+          <div class="legend"><span><i style="background:var(--accent)"></i>Longest planned rep</span><span><i style="background:var(--calm)"></i>Longest calm rep</span><span><i style="background:var(--upset)"></i>Got upset</span></div></div>` : ""}
+        ${list.length ? `<div class="rp-block">${insightsCard(list.slice().reverse(), true)}</div>` : ""}
+        ${list.length ? `<div class="rp-block"><h3>Sessions</h3></div>
+        <div class="rp-scroll"><table class="rp-table"><thead class="rp-block"><tr><th>Date</th><th>Stage</th><th>Longest</th><th>Reps (length, result)</th><th>Who</th></tr></thead><tbody>
+          ${list.map(s => {
+            const done = (s.reps || []).filter(x => x.result).sort((a, b) => a.i - b.i);
+            const who = [...new Set(done.map(x => x.by).filter(Boolean))];
+            const notes = [s.notes, ...done.filter(x => x.note).map(x => `rep ${x.i + 1}: ${x.note}`)].filter(Boolean).join(" · ");
+            return `<tr class="rp-block"><td>${esc(niceDate(s.date, { weekday: "short", day: "numeric", month: "short" }))}${done.some(x => x.at) ? `<br><span class="muted">${timeOf(Math.min(...done.filter(x => x.at).map(x => x.at)))}</span>` : ""}</td>
+              <td>${sessionMode(s) === "gate" ? "Gate" : "Door"}</td><td>${fmt(s.working)}</td>
+              <td><div class="dots">${done.map(x => `<span class="dot ${x.result === "skip" ? "none" : x.result}">${x.result === "skip" ? "skip" : fmt(x.actual || x.target)}</span>`).join("")}</div>${notes ? `<div class="muted" style="margin-top:4px">${esc(notes)}</div>` : ""}</td>
+              <td>${who.map(name).join(", ")}</td></tr>`;
+          }).join("")}
+        </tbody></table></div>
+        <p class="rp-block small muted">Colours: <span class="dot calm">calm</span> <span class="dot mild">mild stress</span> <span class="dot upset">upset</span>. The time shown is how long the rep lasted; shorter than planned means someone went back in early.</p>` : `<p class="rp-block muted">No training sessions in this period.</p>`}
+        ${absences.length ? `<div class="rp-block"><h3>Real absences (left alone outside training)</h3></div>
+        <table class="rp-table"><thead class="rp-block"><tr><th>Date</th><th>Time</th><th>How long</th><th>How it went</th><th>Note</th></tr></thead><tbody>
+          ${absences.map(a => `<tr class="rp-block"><td>${esc(niceDate(a.date, { weekday: "short", day: "numeric", month: "short" }))}</td><td>${timeOf(a.start)}</td><td>${fmt(a.seconds)}</td><td>${ABS_LABEL[a.result]}</td><td>${esc(a.note || "")}</td></tr>`).join("")}
+        </tbody></table>` : ""}
+        <div class="rp-block small muted"><b style="color:var(--ink)">How the plan adjusts.</b> Each session has a longest rep, with shorter reps above and below it. All calm through the longest rep: next session about +15%. Mild stress: −15%. Upset: stop for the day, next session at 60% of where it went wrong. Breaks of 4–6, 7–13 and 14+ days restart at 85%, 70% and 50%. An upset real absence makes the next session 25% easier.</div>
+      </div>`;
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const el = document.createElement("script");
+      el.src = src; el.onload = resolve;
+      el.onerror = () => reject(new Error("Couldn't load the export tool. Check your connection and try again."));
+      document.head.appendChild(el);
+    });
+  }
+  function deliverFile(blob, filename) {
+    const file = new File([blob], filename, { type: blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) return navigator.share({ files: [file], title: filename }).catch(() => {});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  // Render the report at a fixed paper width, then cut it into A4 pages between rows.
+  async function exportReport(kind) {
+    if (state.exporting) return;
+    state.exporting = kind; render();
+    try {
+      if (!window.html2canvas) await loadScript("/vendor/html2canvas-1.4.1.min.js");
+      if (kind === "pdf" && !window.jspdf) await loadScript("/vendor/jspdf-2.5.1.umd.min.js");
+      const el = document.getElementById("report");
+      const WIDTH = 720;
+      let cuts = [];
+      const opts = {
+        backgroundColor: "#ffffff", windowWidth: WIDTH + 40,
+        onclone: doc => {
+          const r = doc.getElementById("report");
+          r.style.width = WIDTH + "px"; r.style.borderRadius = "0";
+          doc.querySelectorAll(".rp-scroll").forEach(x => (x.style.overflow = "visible"));
+          const top = r.getBoundingClientRect().top;
+          cuts = [...r.querySelectorAll(".rp-block")].map(b => b.getBoundingClientRect().bottom - top);
+        },
+      };
+      // Keep the canvas inside phone memory limits on long reports.
+      const tall = el.scrollHeight * (WIDTH / Math.max(1, el.clientWidth));
+      opts.scale = Math.min(2, Math.sqrt(15e6 / (WIDTH * Math.max(tall, 1))));
+      const canvas = await window.html2canvas(el, opts);
+      const { from, to } = reportRange();
+      const base = `${dog().toLowerCase()}-report-${from}-to-${to}`;
+      let blob;
+      if (kind === "png") {
+        blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+        await deliverFile(blob, base + ".png");
+      } else {
+        const pdf = new window.jspdf.jsPDF({ unit: "pt", format: "a4" });
+        const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight(), margin = 28;
+        const k = (pageW - margin * 2) / canvas.width;           // canvas px -> pt
+        const pxPerPage = (pageH - margin * 2) / k;
+        const scaleCuts = cuts.map(c => c * (canvas.width / WIDTH)).sort((a, b) => a - b);
+        let start = 0, first = true;
+        while (start < canvas.height - 1) {
+          const limit = start + pxPerPage;
+          const fit = scaleCuts.filter(c => c > start + 40 && c <= limit);
+          // If only a sliver would spill onto a new page, shrink this last page slightly instead.
+          const end = canvas.height - start <= pxPerPage * 1.15 ? canvas.height : fit.length ? fit[fit.length - 1] : limit;
+          const slice = document.createElement("canvas");
+          slice.width = canvas.width; slice.height = Math.ceil(end - start);
+          const ctx = slice.getContext("2d");
+          ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, slice.width, slice.height);
+          ctx.drawImage(canvas, 0, start, canvas.width, slice.height, 0, 0, canvas.width, slice.height);
+          if (!first) pdf.addPage();
+          const fitK = Math.min(k, (pageH - margin * 2) / slice.height);
+          pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, canvas.width * fitK, slice.height * fitK);
+          first = false; start = end;
+        }
+        blob = pdf.output("blob");
+        await deliverFile(blob, base + ".pdf");
+      }
+    } catch (e) {
+      console.error(e); toast(e.message || "Couldn't make the file. Try again.");
+    }
+    state.exporting = null; render();
   }
 
   function weekCard() {
@@ -998,7 +1164,7 @@ import * as P from "/plan.js";
   document.getElementById("tabs").addEventListener("click", e => {
     const b = e.target.closest("button[data-tab]"); if (!b) return;
     state.tab = b.dataset.tab; render(); window.scrollTo(0, 0);
-    try { localStorage.setItem("yeti-tab", state.tab); } catch (err) {}
+    try { localStorage.setItem("yeti-tab", state.tab === "report" ? "history" : state.tab); } catch (err) {}
   });
 
   appEl.addEventListener("click", e => {
@@ -1006,6 +1172,11 @@ import * as P from "/plan.js";
     const act = b.dataset.act, t = todayStr();
     if (act === "start") startRep(+b.dataset.i);
     else if (act === "edit-rep") editRep(b.dataset.d, +b.dataset.i);
+    else if (act === "open-report") { state.tab = "report"; render(); window.scrollTo(0, 0); }
+    else if (act === "back-history") { state.tab = "history"; render(); window.scrollTo(0, 0); }
+    else if (act === "report-period") { state.report = { ...(state.report || {}), period: b.dataset.p }; render(); }
+    else if (act === "report-pdf") exportReport("pdf");
+    else if (act === "report-png") exportReport("png");
     else if (act === "log-absence") absenceSheet(null);
     else if (act === "edit-absence") absenceSheet(state.absences.find(a => a.id === b.dataset.id));
     else if (act === "logout") { api("/api/logout", { method: "POST" }).catch(() => {}).finally(() => { state.me = null; state.configLoaded = false; lastSnapshot = ""; render(); }); }
@@ -1055,6 +1226,10 @@ import * as P from "/plan.js";
   });
 
   appEl.addEventListener("change", e => {
+    if (e.target.id === "rp-from" || e.target.id === "rp-to") {
+      state.report = { ...state.report, period: "custom", from: document.getElementById("rp-from").value, to: document.getElementById("rp-to").value };
+      render(); return;
+    }
     if (["push-morning", "push-evening", "push-weekly"].includes(e.target.id)) {
       savePushPrefs({ morning: document.getElementById("push-morning").checked, evening: document.getElementById("push-evening").checked, weekly: document.getElementById("push-weekly").checked });
       return;

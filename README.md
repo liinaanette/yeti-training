@@ -28,6 +28,20 @@ Push notifications: today's plan every morning, and an evening nudge if nobody h
 
 The times are set in `vercel.json` in UTC: 05:00 for the morning and 16:00 for the evening. On Vercel's free plan a job can run any time within that hour.
 
+## Features
+
+- Daily plan with a rep timer, departure cues and automatic step-up/step-back
+- Two stages: behind a baby gate, then the front door
+- Tap a logged rep to change or delete it; log real absences ("Log time alone")
+- History with progress chart, last-7-days summary and calm rate by time of day and person
+- Report for your behaviourist: pick a period, save as PDF or image
+- Download all data as CSV
+- Push reminders: morning plan, evening nudge, Sunday weekly summary
+
+## Tests
+
+`npm install` then `npm test` runs the training-logic tests in `test/`.
+
 ## On your phones
 
 - **iPhone:** open the site in Safari, tap Share, then **Add to Home Screen**.
