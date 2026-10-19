@@ -7,9 +7,12 @@ const ONE_YEAR = 60 * 60 * 24 * 365;
 let sql = null;
 let ready = null;
 
+// Vercel's Neon integration sets both; either works.
+const databaseUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
 // Returns the Neon query function once the tables exist. Tables are created on first use.
 export async function db() {
-  if (!sql) sql = neon(process.env.DATABASE_URL);
+  if (!sql) sql = neon(databaseUrl());
   if (!ready) {
     ready = (async () => {
       await sql`CREATE TABLE IF NOT EXISTS config (
@@ -32,7 +35,8 @@ export async function db() {
 }
 
 export function checkEnv(res) {
-  const missing = ["DATABASE_URL", "APP_PASSWORD", "SESSION_SECRET"].filter(k => !process.env[k]);
+  const missing = ["APP_PASSWORD", "SESSION_SECRET"].filter(k => !process.env[k]);
+  if (!databaseUrl()) missing.unshift("DATABASE_URL");
   if (missing.length) {
     res.status(500).json({ error: `Missing environment variables: ${missing.join(", ")}` });
     return false;
