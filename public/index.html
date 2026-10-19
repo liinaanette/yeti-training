@@ -179,6 +179,12 @@ label.field span.muted { font-weight: 400; }
 .outcome button.res.upset b { color: #ff8a7a; }
 .outcome button.res[aria-pressed="true"] { border-color: currentColor; }
 .outcome input { background: #1b2834; border-color: #2c3d4c; color: var(--overlay-ink); }
+.stages { display: grid; gap: 8px; }
+.stages button { text-align: left; border: 1.5px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+.stages button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.stages b { font-family: var(--font-display); font-size: 1.05rem; }
+.stages span { font-size: 0.85rem; color: var(--muted); }
+.stage-tag { display: inline-block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 2px 7px; }
 details summary { cursor: pointer; font-weight: 700; }
 details[open] summary { margin-bottom: 8px; }
 .prose { display: grid; gap: 8px; font-size: 0.93rem; }
@@ -206,7 +212,21 @@ details[open] summary { margin-bottom: 8px; }
     mild: { label: "Mild stress", hint: "Pacing, waiting at the door, a whine or two" },
     upset: { label: "Upset", hint: "Barking, howling, scratching, heavy panting" },
   };
-  const CUES = ["Pick up keys", "Put on shoes", "Put on jacket", "Grab your bag", "Touch the door handle", "Open and close the front door", "Pick up phone and wallet"];
+  // Stage 1 keeps the person inside the flat behind a baby gate; stage 2 is the real front door.
+  const STAGES = {
+    gate: {
+      label: "Behind the gate", defaultStart: 60, goal: 600,
+      desc: "Dog stays behind the baby gate, you go out of sight inside the flat.",
+      cues: ["Pick up keys", "Open and close the first front door (stay inside)", "Put on shoes", "Rattle the door handle", "Put on jacket", "Close the gate and step straight back", "Grab your bag"],
+    },
+    door: {
+      label: "Front door", defaultStart: 30,
+      desc: "You go out through both front doors.",
+      cues: ["Pick up keys", "Open and close the first door", "Put on shoes", "Open both doors and close them again", "Put on jacket", "Step into the hallway and come straight back", "Grab your bag"],
+    },
+  };
+  const curMode = () => (state.config && state.config.mode) || "door";
+  const sessionMode = s => (s && s.mode) || "door";
   // Up-and-down rep shapes (fractions of the working duration). The longest rep sits late, an easy rep closes the session.
   const PATTERNS = [
     [0.1, 0.3, 0.6, 0.2, 0.8, 0.45, 1, 0.25],
@@ -277,11 +297,11 @@ details[open] summary { margin-bottom: 8px; }
     return { w: prev, why: "Last session didn't get through the longest rep, so today repeats the same level." };
   }
 
-  function computeWorking() {
-    const cfg = state.config, t = todayStr();
-    const base = cfg.base || { seconds: 30, setOn: t };
+  function computeWorking(mode = curMode()) {
+    const t = todayStr();
+    const base = getBase(mode) || { seconds: STAGES[mode].defaultStart, setOn: t, setAt: 0 };
     const past = [...state.sessions.values()]
-      .filter(s => s.date < t && doneReps(s).length)
+      .filter(s => s.date < t && doneReps(s).length && sessionMode(s) === mode)
       .sort((a, b) => (a.date < b.date ? 1 : -1));
     const last = past[0];
     if (!last || base.setOn > last.date || (base.setOn === last.date && base.setAt > (last.createdAt || 0))) {
@@ -304,7 +324,8 @@ details[open] summary { margin-bottom: 8px; }
     }
     return p.map(f => roundDur(Math.max(2, f * w)));
   }
-  const pickCues = date => { const n = dayNum(date); return [CUES[n % CUES.length], CUES[(n + 3) % CUES.length]]; };
+  const pickCues = (date, mode) => { const c = STAGES[mode].cues, n = dayNum(date); return [c[n % c.length], c[(n + 3) % c.length]]; };
+  const getBase = mode => (state.config.bases && state.config.bases[mode]) || (mode === "door" ? state.config.base : null);
 
   function restSuggested() {
     const t = todayStr(), per = (state.config && state.config.perWeek) || 5;
@@ -318,9 +339,9 @@ details[open] summary { margin-bottom: 8px; }
     for (let i = 0; i < 7; i++) { const s = state.sessions.get(addDays(t, -i)); if (s && doneReps(s).length) c++; }
     return c;
   }
-  function bestCalmEver() {
+  function bestCalmEver(mode) {
     let best = 0;
-    for (const s of state.sessions.values()) for (const r of doneReps(s)) if (r.result === "calm") best = Math.max(best, r.actual || r.target);
+    for (const s of state.sessions.values()) if (sessionMode(s) === mode) for (const r of doneReps(s)) if (r.result === "calm") best = Math.max(best, r.actual || r.target);
     return best;
   }
 
@@ -378,10 +399,25 @@ details[open] summary { margin-bottom: 8px; }
   function ensureToday() {
     const t = todayStr();
     if (state.sessions.get(t)) return state.sessions.get(t);
-    const { w, why } = computeWorking();
-    const s = { date: t, working: w, why, plan: buildPlan(w, t), cues: pickCues(t), cuesDone: false, reps: [], notes: "", createdAt: Date.now() };
+    const mode = curMode();
+    const { w, why } = computeWorking(mode);
+    const s = { date: t, mode, working: w, why, plan: buildPlan(w, t), cues: pickCues(t, mode), cuesDone: false, reps: [], notes: "", createdAt: Date.now() };
     saveSession(t, s, true);
     return s;
+  }
+  // Point a stage at a new level, and rebuild today's plan if no reps are done yet.
+  function setStage(mode, seconds) {
+    const bases = { ...(state.config.bases || {}) };
+    if (!bases.door && state.config.base) bases.door = state.config.base;
+    if (seconds) bases[mode] = { seconds, setOn: todayStr(), setAt: Date.now() };
+    saveConfig({ mode, bases });
+    const t = todayStr(), s = state.sessions.get(t);
+    if (s && !doneReps(s).length) {
+      const { w, why } = computeWorking(mode);
+      saveSession(t, { mode, working: w, why, plan: buildPlan(w, t), cues: pickCues(t, mode), cuesDone: false });
+      return true;
+    }
+    return !s;
   }
   function saveConfig(patch) {
     state.config = { ...(state.config || {}), ...patch };
@@ -452,18 +488,28 @@ details[open] summary { margin-bottom: 8px; }
       <div class="card">
         <label class="field">Dog's name<input type="text" id="setup-name" value="Yeti" autocomplete="off"></label>
         <div class="field" style="display:grid;gap:8px">
-          <b class="small">How long can your dog stay alone right now and stay calm?</b>
+          <b class="small">How long can your dog stay calm without you right now?</b>
           <p class="small muted">Pick the time you're confident about, not the best day ever. If you don't know, start short. The plan adjusts after every session.</p>
           <div class="presets" id="presets">
             ${[5, 15, 30, 60, 120, 300, 600].map(s => `<button type="button" data-s="${s}" aria-pressed="${s === 30}">${fmt(s)}</button>`).join("")}
           </div>
           <input type="text" id="setup-dur" placeholder="Or type a time, e.g. 1:30 or 4m" autocomplete="off">
         </div>
+        <div class="field" style="display:grid;gap:8px">
+          <b class="small">Where do you start?</b>
+          <div class="stages" id="setup-stage">
+            ${Object.entries(STAGES).map(([k, st]) => `<button type="button" data-mode="${k}" aria-pressed="${k === "gate"}"><b>${st.label}</b><span>${esc(st.desc)}</span></button>`).join("")}
+          </div>
+        </div>
         <button class="btn" id="setup-go">Make today's plan</button>
       </div>`;
   }
   function bindSetup() {
-    let chosen = 30;
+    let chosen = 30, mode = "gate";
+    document.querySelectorAll("#setup-stage button").forEach(b => (b.onclick = () => {
+      mode = b.dataset.mode;
+      document.querySelectorAll("#setup-stage button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    }));
     document.querySelectorAll("#presets button").forEach(b => (b.onclick = () => {
       chosen = +b.dataset.s; document.getElementById("setup-dur").value = "";
       document.querySelectorAll("#presets button").forEach(x => x.setAttribute("aria-pressed", x === b));
@@ -471,17 +517,18 @@ details[open] summary { margin-bottom: 8px; }
     document.getElementById("setup-go").onclick = () => {
       const typed = parseDur(document.getElementById("setup-dur").value);
       const seconds = typed || chosen;
-      saveConfig({ dogName: document.getElementById("setup-name").value.trim() || "Yeti", base: { seconds, setOn: todayStr(), setAt: Date.now() }, perWeek: 5, capMin: 30 });
+      saveConfig({ dogName: document.getElementById("setup-name").value.trim() || "Yeti", mode, bases: { [mode]: { seconds, setOn: todayStr(), setAt: Date.now() } }, perWeek: 5, capMin: 30 });
     };
   }
 
   function todayView() {
     const t = todayStr();
     const s = state.sessions.get(t);
-    const computed = s ? null : computeWorking();
+    const mode = s ? sessionMode(s) : curMode();
+    const computed = s ? null : computeWorking(mode);
     const w = s ? s.working : computed.w;
     const plan = s ? s.plan : buildPlan(w, t);
-    const cues = s ? s.cues : pickCues(t);
+    const cues = s ? s.cues : pickCues(t, mode);
     const reps = (s && s.reps) || [];
     const repFor = i => reps.find(r => r.i === i);
     const nextIdx = plan.findIndex((_, i) => !repFor(i));
@@ -496,6 +543,10 @@ details[open] summary { margin-bottom: 8px; }
       banner = `<div class="banner rest"><h2>Rest day suggested</h2><p class="small">${esc(dog())} has trained ${(state.config.perWeek || 5)} days in the last week. A day off helps the progress stick. Keep any time alone today shorter than ${fmt(w)}.</p><div class="row"><button class="btn sm ghost" data-act="train-anyway">Train anyway</button></div></div>`;
     } else if (upset && !allDone && !state.ignoreUpset) {
       banner = `<div class="banner upset"><h2>Stop here for today</h2><p class="small">${esc(dog())} got upset. End with something fun: a walk, a sniff game, a chew. Tomorrow's plan steps back automatically.</p><div class="row"><button class="btn sm quiet" data-act="end-session">End today's session</button><button class="btn sm ghost" data-act="ignore-upset">Keep going</button></div></div>`;
+    } else if (mode === "gate" && w >= STAGES.gate.goal && !(s && doneReps(s).length)) {
+      banner = `<div class="banner calm"><h2>Ready for the front door?</h2><p class="small">${esc(dog())} is up to ${fmt(w)} behind the gate. You can keep going here or move on to real departures. The door stage starts shorter, because leaving through the front door is a bigger deal.</p><div class="row"><button class="btn sm ghost" data-act="goto-settings">Change stage</button></div></div>`;
+    } else if (!state.config.mode && !s) {
+      banner = `<div class="banner rest"><h2>New: start behind a baby gate</h2><p class="small">If going out the front door is slow or noisy, start with ${esc(dog())} behind a gate while you go out of sight inside. Move to the door later.</p><div class="row"><button class="btn sm ghost" data-act="goto-settings">Choose a stage</button></div></div>`;
     } else if (allDone && s) {
       const n = nextAfter(s);
       banner = `<div class="banner ${upset ? "upset" : "calm"}"><h2>Done for today</h2><p class="small">Tomorrow's longest rep will be about <b class="num">${fmt(roundDur(Math.max(3, n.w)))}</b>. ${esc(n.why.replace("last session", "today").replace("last time", "today").replace("so today", "so tomorrow"))}</p></div>`;
@@ -514,10 +565,11 @@ details[open] summary { margin-bottom: 8px; }
     return `
       <div class="top">
         <div><p class="eyebrow">${esc(niceDate(t))}</p><h1>${esc(dog())}'s plan today</h1></div>
+        <span class="stage-tag">${esc(STAGES[mode].label)}</span>
       </div>
       <div class="stats">
         <div class="stat lead"><span class="eyebrow">Longest rep</span><b>${fmt(w)}</b></div>
-        <div class="stat"><span class="eyebrow">Best calm</span><b>${bestCalmEver() ? fmt(bestCalmEver()) : "–"}</b></div>
+        <div class="stat"><span class="eyebrow">Best calm</span><b>${bestCalmEver(mode) ? fmt(bestCalmEver(mode)) : "–"}</b></div>
         <div class="stat"><span class="eyebrow">Last 7 days</span><b>${weekCount()}/${state.config.perWeek || 5}</b></div>
       </div>
       ${banner}
@@ -531,7 +583,9 @@ details[open] summary { margin-bottom: 8px; }
       </div>
       <div class="card">
         <div class="row" style="justify-content:space-between"><h2>Reps</h2><span class="small muted num">${plan.length} reps · about ${estMin} min</span></div>
-        <p class="small muted">Go out the door, close it, come back when the timer ends. Come back early if ${esc(dog())} starts to stress. Between reps, sit calmly for 1–2 minutes until ${esc(dog())} settles.</p>
+        <p class="small muted">${mode === "gate"
+          ? `Close the gate with ${esc(dog())} on the other side and go out of sight: another room, or round a corner. Come back when the timer ends.`
+          : `Head out through both doors and tap "I'm out" once they're shut. The timer starts then. Come back when it ends.`} Come back early if ${esc(dog())} starts to stress. Between reps, sit calmly for 1–2 minutes until ${esc(dog())} settles.</p>
         <ol class="reps">${repRows}</ol>
         ${!rest ? `<div class="row"><button class="btn sm ghost" data-act="add-rep">Add a rep</button><input type="text" id="extra-dur" placeholder="e.g. 45s" style="width:8rem" autocomplete="off"></div>` : ""}
       </div>
@@ -545,8 +599,8 @@ details[open] summary { margin-bottom: 8px; }
     return `
       <div class="top"><div><p class="eyebrow">History</p><h1>Every session, both of you</h1></div></div>
       <div class="card">
-        <h2>Progress</h2>
-        ${chart(list.slice().reverse())}
+        <div class="row" style="justify-content:space-between"><h2>Progress</h2><span class="stage-tag">${esc(STAGES[curMode()].label)}</span></div>
+        ${list.some(s => sessionMode(s) === curMode()) ? chart(list.filter(s => sessionMode(s) === curMode()).reverse()) : `<p class="small muted">No sessions in this stage yet.</p>`}
         <div class="legend"><span><i style="background:var(--accent)"></i>Longest planned rep</span><span><i style="background:var(--calm)"></i>Longest calm rep</span><span><i style="background:var(--upset)"></i>Got upset</span></div>
       </div>
       ${list.map(sessionCard).join("")}`;
@@ -559,7 +613,7 @@ details[open] summary { margin-bottom: 8px; }
     const who = [...new Set(done.map(r => r.by).filter(Boolean))];
     const open = state.openHistory.has(s.date);
     return `<div class="session">
-      <div class="session-head"><b>${esc(niceDate(s.date, { weekday: "short", day: "numeric", month: "short" }))}</b><span class="small muted num">Longest ${fmt(s.working)}${best ? ` · best calm ${fmt(best)}` : ""}</span></div>
+      <div class="session-head"><b>${esc(niceDate(s.date, { weekday: "short", day: "numeric", month: "short" }))} <span class="stage-tag">${sessionMode(s) === "gate" ? "Gate" : "Door"}</span></b><span class="small muted num">Longest ${fmt(s.working)}${best ? ` · best calm ${fmt(best)}` : ""}</span></div>
       <div class="dots">${done.map(r => `<span class="dot ${r.result === "skip" ? "none" : r.result}" title="${r.result === "skip" ? "Skipped" : RESULTS[r.result].label}">${fmt(r.actual || r.target)}</span>`).join("")}</div>
       <div class="row" style="justify-content:space-between">
         <div class="row">${who.map(name => `<span class="who">${esc(personName(name))}</span>`).join("")}</div>
@@ -597,9 +651,22 @@ details[open] summary { margin-bottom: 8px; }
   function settingsView() {
     const c = state.config;
     const today = state.sessions.get(todayStr());
-    const w = today ? today.working : computeWorking().w;
+    const w = today && sessionMode(today) === curMode() ? today.working : computeWorking().w;
+    const pick = state.stagePick || curMode();
+    const pickBase = getBase(pick);
+    const switching = pick !== curMode() || !state.config.mode;
     return `
       <div class="top"><div><p class="eyebrow">Settings</p><h1>Plan settings</h1></div></div>
+      <div class="card">
+        <h2>Training stage</h2>
+        <div class="stages">
+          ${Object.entries(STAGES).map(([k, st]) => `<button type="button" data-act="pick-stage" data-mode="${k}" aria-pressed="${k === pick}"><b>${st.label}${k === curMode() && state.config.mode ? " · current" : ""}</b><span>${esc(st.desc)}</span></button>`).join("")}
+        </div>
+        ${switching ? `
+          <label class="field">Starting level for ${esc(STAGES[pick].label.toLowerCase())}<span class="muted small">${pickBase ? `Leave empty to carry on from where this stage was.` : `How long ${esc(dog())} stays calm in this setup. Not sure? Leave it empty to start at ${fmt(STAGES[pick].defaultStart)}.`}</span>
+            <input type="text" id="stage-base" placeholder="e.g. 2m or 1:30" autocomplete="off"></label>
+          <button class="btn" data-act="switch-stage">Switch to ${esc(STAGES[pick].label.toLowerCase())}</button>` : ""}
+      </div>
       <div class="card">
         <label class="field">Dog's name<input type="text" id="set-name" value="${esc(c.dogName || "")}" autocomplete="off"></label>
         <label class="field">Training days per week<span class="muted small">After this many sessions in a week, the app suggests a rest day.</span>
@@ -610,7 +677,7 @@ details[open] summary { margin-bottom: 8px; }
       </div>
       <div class="card">
         <h2>Reset the level</h2>
-        <p class="small muted">Use this if something changed: a move, illness, a bad scare, or a trainer's advice. The next plan starts from this time. Right now it's <b class="num">${fmt(w)}</b>.</p>
+        <p class="small muted">For the ${esc(STAGES[curMode()].label.toLowerCase())} stage. Use this if something changed: a move, illness, a bad scare, or a trainer's advice. The next plan starts from this time. Right now it's <b class="num">${fmt(w)}</b>.</p>
         <div class="row"><input type="text" id="set-base" placeholder="e.g. 2m or 1:30" style="max-width:12rem" autocomplete="off"><button class="btn sm" data-act="set-base">Set level</button></div>
       </div>
       <div class="card">
@@ -627,6 +694,7 @@ details[open] summary { margin-bottom: 8px; }
               <li>Mild stress: next session steps back about 15%.</li>
               <li>Upset: stop for the day. The next session drops to 60% of where it went wrong.</li>
               <li>4 or more days off: the next session is 15% easier.</li>
+              <li>Stages: start behind a baby gate inside the flat, then move to the front door. Each stage keeps its own level. Practise the noisy door routine as a departure cue while you're still in the gate stage.</li>
               <li>Outside training, try not to leave ${esc(dog())} alone longer than the current level. Use a sitter, daycare or a friend while you build up.</li>
             </ul>
             <p class="muted small">This follows the common sub-threshold approach to separation anxiety. If ${esc(dog())} panics, hurts themself or doesn't improve over a few weeks, talk to your vet or a separation anxiety trainer.</p>
@@ -657,7 +725,8 @@ details[open] summary { margin-bottom: 8px; }
     const target = s.plan[i];
     try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume && audio.resume(); } catch (e) {}
     try { navigator.wakeLock && navigator.wakeLock.request("screen").then(l => (wakeLock = l)).catch(() => {}); } catch (e) {}
-    state.timer = { i, target, start: Date.now(), done: false, actual: null, result: null };
+    const door = sessionMode(s) === "door";
+    state.timer = { i, target, start: Date.now(), done: false, actual: null, result: null, phase: door ? "leaving" : "run", door };
     overlay.hidden = false;
     drawTimer();
     state.timer.tick = setInterval(drawTimer, 250);
@@ -666,13 +735,24 @@ details[open] summary { margin-bottom: 8px; }
   function drawTimer() {
     const tm = state.timer; if (!tm) return;
     if (tm.phase === "outcome") return;
+    if (tm.phase === "leaving") {
+      if (!overlay.querySelector("#t-out")) {
+        overlay.innerHTML = `
+          <div><p class="eyebrow">Rep ${tm.i + 1} · ${fmt(tm.target)}</p><h2 style="margin-top:6px">Head out through both doors</h2></div>
+          <p class="small" style="color:#a9bac8;max-width:28rem">Tap "I'm out" once both doors are shut behind you. The timer starts then.</p>
+          <div class="row" style="justify-content:center"><button class="btn" id="t-out">I'm out</button><button class="btn quiet" id="t-cancel">Cancel rep</button></div>`;
+        overlay.querySelector("#t-out").onclick = () => { tm.phase = "run"; tm.start = Date.now(); overlay.innerHTML = ""; drawTimer(); };
+        overlay.querySelector("#t-cancel").onclick = closeTimer;
+      }
+      return;
+    }
     const elapsed = (Date.now() - tm.start) / 1000;
     const left = tm.target - elapsed;
     if (left <= 0 && !tm.done) { tm.done = true; beep(); return finishTimer(tm.target); }
     const C = 2 * Math.PI * 46, frac = Math.min(1, elapsed / tm.target);
     if (!overlay.querySelector(".ring")) {
       overlay.innerHTML = `
-        <div><p class="eyebrow">Rep ${tm.i + 1} · ${fmt(tm.target)}</p><h2 style="margin-top:6px">Step out and close the door</h2></div>
+        <div><p class="eyebrow">Rep ${tm.i + 1} · ${fmt(tm.target)}</p><h2 style="margin-top:6px">${tm.door ? "You're out. Stay out" : "Close the gate and go out of sight"}</h2></div>
         <div class="ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="none" stroke="#223240" stroke-width="6"/><circle id="ring-fg" cx="50" cy="50" r="46" fill="none" stroke="#7d9bff" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="0"/></svg>
           <div class="clock"><b id="t-left" class="num">${clock(left)}</b><span class="small" style="color:#9fb2c2">left</span></div></div>
         <p class="small" style="color:#a9bac8;max-width:28rem">Come back in when it beeps. If ${esc(dog())} starts to stress, come back right away and end the rep.</p>
@@ -731,6 +811,18 @@ details[open] summary { margin-bottom: 8px; }
     const act = b.dataset.act, t = todayStr();
     if (act === "start") startRep(+b.dataset.i);
     else if (act === "logout") { api("/api/logout", { method: "POST" }).catch(() => {}).finally(() => { state.me = null; state.configLoaded = false; lastSnapshot = ""; render(); }); }
+    else if (act === "goto-settings") { state.tab = "settings"; render(); window.scrollTo(0, 0); }
+    else if (act === "pick-stage") { state.stagePick = b.dataset.mode; render(); }
+    else if (act === "switch-stage") {
+      const mode = state.stagePick || curMode();
+      const typed = document.getElementById("stage-base").value.trim();
+      const v = typed ? parseDur(typed) : null;
+      if (typed && !v) return toast("Type a time like 2m, 90s or 1:30, or leave it empty.");
+      const seconds = v || (getBase(mode) ? null : STAGES[mode].defaultStart);
+      const now = setStage(mode, seconds);
+      state.stagePick = null;
+      toast(now ? `Switched to ${STAGES[mode].label.toLowerCase()}. Today's plan is updated.` : `Switched to ${STAGES[mode].label.toLowerCase()}. It starts with tomorrow's session, since reps are already done today.`);
+    }
     else if (act === "train-anyway") { state.trainAnyway = true; render(); }
     else if (act === "ignore-upset") { state.ignoreUpset = true; render(); }
     else if (act === "end-session") {
@@ -752,9 +844,7 @@ details[open] summary { margin-bottom: 8px; }
     } else if (act === "set-base") {
       const v = parseDur(document.getElementById("set-base").value);
       if (!v) return toast("Type a time like 2m, 90s or 1:30.");
-      saveConfig({ base: { seconds: v, setOn: t, setAt: Date.now() } });
-      const s = state.sessions.get(t);
-      if (s && !doneReps(s).length) saveSession(t, { working: roundDur(v), why: `Starting from the level you set: ${fmt(v)}.`, plan: buildPlan(roundDur(v), t) });
+      setStage(curMode(), v);
       toast(`Level set to ${fmt(v)}.`);
     }
   });
