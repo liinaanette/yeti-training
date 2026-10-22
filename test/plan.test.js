@@ -32,6 +32,18 @@ test("not reaching the longest rep repeats the level", () => {
   assert.equal(computeWorking(config, map([s]), "2026-10-19").w, 120);
 });
 
+test("staying out longer on a calm day is a normal step up, not a jump", () => {
+  const s = session("2026-10-18", 120, [rep(0, 30, "calm"), rep(1, 120, "calm", 300)]);
+  assert.equal(computeWorking(config, map([s]), "2026-10-19").w, 135);
+});
+
+test("mild stress only in extra time holds the level", () => {
+  const s = session("2026-10-18", 120, [rep(0, 30, "calm"), rep(1, 120, "mild", 200)]);
+  assert.equal(computeWorking(config, map([s]), "2026-10-19").w, 120);
+  const planned = session("2026-10-18", 120, [rep(0, 30, "mild"), rep(1, 120, "calm", 200)]);
+  assert.equal(computeWorking(config, map([planned]), "2026-10-19").w, 105);
+});
+
 test("longer breaks start lower", () => {
   const s = session("2026-10-01", 120, [rep(0, 30, "calm")]);
   assert.equal(computeWorking(config, map([s]), "2026-10-04").w, 120);   // 3 days: no change

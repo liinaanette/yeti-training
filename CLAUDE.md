@@ -29,6 +29,7 @@ Sessions PATCH (`server/sessions.js`, at `/api/sessions/<date>`) merges top-leve
 
 Each session has a "longest rep" (working level) and an up-and-down plan of shorter reps around it.
 - All calm through the longest rep → next ×1.15 (or +5s under a minute). Mild stress → ×0.85. Upset → 60% of where it went wrong. Didn't reach the longest rep → same level.
+- The rep timer keeps counting past the planned time ("extra time") until "I'm back", so `actual` can exceed `target`. Extra time never makes the step bigger; mild stress that only happened in extra time (with the longest rep reached) holds the level.
 - Breaks: 4–6 days ×0.85, 7–13 ×0.7, 14+ ×0.5. An upset real absence since the last session ×0.75.
 - Each stage (`gate`, `door`) has its own level and history. A manual level reset (`bases[mode]`) after the last session wins.
 - Rest day suggested after `perWeek` sessions in the previous 6 days.

@@ -562,7 +562,7 @@ import * as P from "/plan.js";
     const repRows = plan.map((target, i) => {
       const r = repFor(i);
       let right;
-      if (r) right = `<button class="pill-btn" data-act="edit-rep" data-d="${t}" data-i="${i}" aria-label="Change rep ${i + 1}">${r.result === "skip" ? `<span class="pill skip">Skipped</span>` : `<span class="pill ${r.result}">${RESULTS[r.result].label}${r.actual && r.actual < r.target ? ` · ${fmt(r.actual)}` : ""}</span>`}<span class="edit-mark" aria-hidden="true">✎</span></button>`;
+      if (r) right = `<button class="pill-btn" data-act="edit-rep" data-d="${t}" data-i="${i}" aria-label="Change rep ${i + 1}">${r.result === "skip" ? `<span class="pill skip">Skipped</span>` : `<span class="pill ${r.result}">${RESULTS[r.result].label}${r.actual && r.actual !== r.target ? ` · ${fmt(r.actual)}` : ""}</span>`}<span class="edit-mark" aria-hidden="true">✎</span></button>`;
       else if (i === nextIdx && !rest) right = `<button class="btn sm" data-act="start" data-i="${i}">Start</button>`;
       else right = `<span class="small muted">to do</span>`;
       const sub = r && r.by ? `<div class="sub">${esc(personName(r.by))}${r.at ? " · " + timeOf(r.at) : ""}${r.note ? " · " + esc(r.note) : ""}</div>` : i === nextIdx && !rest ? `<div class="sub">Up next</div>` : "";
@@ -705,12 +705,12 @@ import * as P from "/plan.js";
               <td>${who.map(name).join(", ")}</td></tr>`;
           }).join("")}
         </tbody></table></div>
-        <p class="rp-block small muted">Colours: <span class="dot calm">calm</span> <span class="dot mild">mild stress</span> <span class="dot upset">upset</span>. The time shown is how long the rep lasted; shorter than planned means someone went back in early.</p>` : `<p class="rp-block muted">No training sessions in this period.</p>`}
+        <p class="rp-block small muted">Colours: <span class="dot calm">calm</span> <span class="dot mild">mild stress</span> <span class="dot upset">upset</span>. The time shown is how long the rep really lasted: shorter than planned means someone went back in early, longer means they stayed out longer because the dog was relaxed.</p>` : `<p class="rp-block muted">No training sessions in this period.</p>`}
         ${absences.length ? `<div class="rp-block"><h3>Real absences (left alone outside training)</h3></div>
         <table class="rp-table"><thead class="rp-block"><tr><th>Date</th><th>Time</th><th>How long</th><th>How it went</th><th>Note</th></tr></thead><tbody>
           ${absences.map(a => `<tr class="rp-block"><td>${esc(niceDate(a.date, { weekday: "short", day: "numeric", month: "short" }))}</td><td>${timeOf(a.start)}</td><td>${fmt(a.seconds)}</td><td>${ABS_LABEL[a.result]}</td><td>${esc(a.note || "")}</td></tr>`).join("")}
         </tbody></table>` : ""}
-        <div class="rp-block small muted"><b style="color:var(--ink)">How the plan adjusts.</b> Each session has a longest rep, with shorter reps above and below it. All calm through the longest rep: next session about +15%. Mild stress: −15%. Upset: stop for the day, next session at 60% of where it went wrong. Breaks of 4–6, 7–13 and 14+ days restart at 85%, 70% and 50%. An upset real absence makes the next session 25% easier.</div>
+        <div class="rp-block small muted"><b style="color:var(--ink)">How the plan adjusts.</b> Each session has a longest rep, with shorter reps above and below it. All calm through the longest rep: next session about +15% (extra time added on a good day doesn't make the step bigger). Mild stress: −15%, or the same level if it only happened in extra time. Upset: stop for the day, next session at 60% of where it went wrong. Breaks of 4–6, 7–13 and 14+ days restart at 85%, 70% and 50%. An upset real absence makes the next session 25% easier.</div>
       </div>`;
   }
 
@@ -904,7 +904,8 @@ import * as P from "/plan.js";
             <p>The method is threshold training: ${esc(dog())} only practices alone time short enough to stay calm, and it grows in small steps.</p>
             <ul>
               <li>Each day has a <b>longest rep</b>. The other reps go up and down around it, so most reps are easier than the last one. That keeps the stress low.</li>
-              <li>All calm through the longest rep: next session goes up about 15% (or +5 seconds for short times).</li>
+              <li>All calm through the longest rep: next session goes up about 15% (or +5 seconds for short times). Staying out longer than planned on a good day counts as calm, but the next step stays small.</li>
+              <li>Calm for the planned time but a bit stressed only in extra time you added: same level next session.</li>
               <li>Mild stress: next session steps back about 15%.</li>
               <li>Upset: stop for the day. The next session drops to 60% of where it went wrong.</li>
               <li>A break makes the next session easier: 4–6 days off starts at 85% of the level, 7–13 days at 70%, two weeks or more at 50%.</li>
@@ -1062,8 +1063,24 @@ import * as P from "/plan.js";
     }
     const elapsed = (Date.now() - tm.start) / 1000;
     const left = tm.target - elapsed;
-    if (left <= 0 && !tm.done) { tm.done = true; beep(); try { navigator.vibrate && navigator.vibrate([300, 150, 300]); } catch (e) {} return finishTimer(tm.target); }
+    // At the planned time: beep, then keep counting so you can stay out longer if the dog is relaxed.
+    if (left <= 0 && !tm.done) { tm.done = true; tm.overtime = true; beep(); try { navigator.vibrate && navigator.vibrate([300, 150, 300]); } catch (e) {} }
     const C = 2 * Math.PI * 46, frac = Math.min(1, elapsed / tm.target);
+    if (tm.overtime) {
+      if (overlay.dataset.mode !== "overtime") {
+        overlay.dataset.mode = "overtime";
+        overlay.innerHTML = `
+          <div><p class="eyebrow">Rep ${tm.i + 1} · planned ${fmt(tm.target)}</p><h2 style="margin-top:6px">Time's up</h2></div>
+          <div class="ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="none" stroke="#5ccf97" stroke-width="6"/></svg>
+            <div class="clock"><b id="t-over" class="num" style="color:#5ccf97"></b><span class="small" style="color:#b4aaa0">extra time</span></div></div>
+          <p class="small" style="color:#b4aaa0;max-width:28rem">Go back in now, or stay out a little longer if ${esc(dog())} is relaxed. Come straight back at the first sign of stress. Tap "I'm back" when you're in.</p>
+          <div class="row" style="justify-content:center"><button class="btn" id="t-back">I'm back</button><button class="btn quiet" id="t-cancel">Cancel rep</button></div>`;
+        overlay.querySelector("#t-back").onclick = () => finishTimer((Date.now() - tm.start) / 1000);
+        overlay.querySelector("#t-cancel").onclick = closeTimer;
+      }
+      overlay.querySelector("#t-over").textContent = "+" + clock(-left);
+      return;
+    }
     if (!overlay.querySelector(".ring")) {
       overlay.innerHTML = `
         <div><p class="eyebrow">Rep ${tm.i + 1} · ${fmt(tm.target)}</p><h2 style="margin-top:6px">${tm.door ? "You're out. Stay out" : "Close the gate and go out of sight"}</h2></div>
@@ -1082,10 +1099,13 @@ import * as P from "/plan.js";
     const tm = state.timer;
     clearInterval(tm.tick);
     repAlertsOff(tm);
-    tm.phase = "outcome"; tm.actual = Math.max(1, Math.min(actual, tm.target));
-    const early = tm.actual < tm.target;
+    overlay.dataset.mode = "";
+    // Within a second of the plan counts as exactly on time.
+    const secs = Math.max(1, Math.round(actual));
+    tm.phase = "outcome"; tm.actual = Math.abs(secs - tm.target) <= 1 ? tm.target : secs;
+    const early = tm.actual < tm.target, over = tm.actual > tm.target;
     overlay.innerHTML = `
-      <div><p class="eyebrow">Rep ${tm.i + 1} · ${early ? `${fmt(tm.actual)} of ${fmt(tm.target)}` : fmt(tm.target)}</p><h2 style="margin-top:6px">${early ? "How was " + esc(dog()) + "?" : "Time's up. How was " + esc(dog()) + "?"}</h2></div>
+      <div><p class="eyebrow">Rep ${tm.i + 1} · ${early ? `${fmt(tm.actual)} of ${fmt(tm.target)}` : over ? `${fmt(tm.actual)}, planned ${fmt(tm.target)}` : fmt(tm.target)}</p><h2 style="margin-top:6px">How was ${esc(dog())}?</h2></div>
       <div class="outcome">
         ${Object.entries(RESULTS).map(([k, v]) => `<button class="res ${k}" data-res="${k}" aria-pressed="${!early && k === "calm"}"><b>${v.label}</b><span>${v.hint}</span></button>`).join("")}
         <input type="text" id="t-note" placeholder="Note (optional)" autocomplete="off">
@@ -1107,7 +1127,7 @@ import * as P from "/plan.js";
 
   function closeTimer() {
     if (state.timer) { clearInterval(state.timer.tick); repAlertsOff(state.timer); }
-    state.timer = null; overlay.hidden = true; overlay.innerHTML = "";
+    state.timer = null; overlay.hidden = true; overlay.innerHTML = ""; overlay.dataset.mode = "";
     try { wakeLock && wakeLock.release(); } catch (e) {}
     wakeLock = null;
     render();
@@ -1140,7 +1160,7 @@ import * as P from "/plan.js";
     overlay.querySelector("#e-save").onclick = () => {
       if (!result) return toast("Pick how it went first.");
       const actual = parseDur(overlay.querySelector("#e-actual").value) || r.target;
-      saveReps(date, [{ ...r, result, actual: Math.min(actual, r.target), note: overlay.querySelector("#e-note").value.trim(), editedBy: state.me, editedAt: Date.now() }]);
+      saveReps(date, [{ ...r, result, actual, note: overlay.querySelector("#e-note").value.trim(), editedBy: state.me, editedAt: Date.now() }]);
       closeSheet(); toast("Rep updated.");
     };
   }

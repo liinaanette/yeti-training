@@ -60,9 +60,15 @@ export function nextAfter(s, dog) {
   const upset = done.filter(r => r.result === "upset");
   const mild = done.filter(r => r.result === "mild");
   const calmTop = done.some(r => r.result === "calm" && r.target >= prev * 0.97);
+  // Extra time: staying out past the planned length when the dog was relaxed.
+  const overtime = r => r.actual > r.target;
+  const reachedTop = done.some(r => r.target >= prev * 0.97 && (r.result === "calm" || (r.result === "mild" && overtime(r))));
   if (upset.length) {
     const t = Math.min(...upset.map(r => r.actual || r.target));
     return { w: Math.min(prev, t) * 0.6, why: `${dog} got upset last session, so today steps back for an easy win.` };
+  }
+  if (mild.length && reachedTop && mild.every(overtime)) {
+    return { w: prev, why: `${dog} was calm for the planned time and only got a bit stressed in the extra time, so today repeats the same level.` };
   }
   if (mild.length) return { w: prev * 0.85, why: "Some mild stress last session, so today is a small step back." };
   if (calmTop) return { w: grow(prev), why: `${dog} stayed calm through the longest rep last time, so today steps up.` };
