@@ -21,21 +21,21 @@ export default async function handler(req, res) {
   };
 
   const weekdayOf = date => new Date(date + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" });
-  const header = ["type", "date", "weekday", "stage", "rep", "planned_seconds", "actual_seconds", "result", "trainer", "started", "finished", "time_of_day", "session_longest_seconds", "cues_done", "rep_note", "session_notes"];
+  const header = ["type", "date", "weekday", "stage", "rep", "planned_seconds", "actual_seconds", "result", "tags", "trainer", "started", "finished", "time_of_day", "session_longest_seconds", "cues_done", "rep_note", "session_notes"];
   const lines = [header.join(",")];
   const out = [];
   for (const s of all.sessions) {
     const reps = (s.reps || []).filter(r => r.result).sort((a, b) => a.i - b.i);
     reps.forEach((r, n) => {
       out.push([r.at || 0, [
-        "rep", s.date, weekdayOf(s.date), s.mode || "door", r.i + 1, r.target, r.result === "skip" ? "" : r.actual, r.result, r.by || "",
+        "rep", s.date, weekdayOf(s.date), s.mode || "door", r.i + 1, r.target, r.result === "skip" ? "" : r.actual, r.result, (r.tags || []).join("; "), r.by || "",
         local(r.startedAt), local(r.at), partOfDay(hour(r.at)), s.working, s.cuesDone ? "yes" : "no", r.note || "", n === 0 ? s.notes || "" : "",
       ]]);
     });
   }
   for (const a of all.absences) {
     out.push([a.start, [
-      "absence", a.date, weekdayOf(a.date), "", "", "", a.seconds, a.result, a.by || "",
+      "absence", a.date, weekdayOf(a.date), "", "", "", a.seconds, a.result, (a.tags || []).join("; "), a.by || "",
       local(a.start), local(a.start + a.seconds * 1000), partOfDay(hour(a.start)), "", "", a.note || "", "",
     ]]);
   }

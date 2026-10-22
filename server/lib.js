@@ -147,3 +147,6 @@ export async function loadAll(sql) {
     absences: absenceRows.map(r => r.data).sort((a, b) => (a.start || 0) - (b.start || 0)),
   };
 }
+
+// Tags are short labels the owners pick after a result ("Lay down", "Whined", or their own).
+export const cleanTags = v => (Array.isArray(v) ? [...new Set(v.filter(t => typeof t === "string").map(t => t.trim().slice(0, 40)).filter(Boolean))].slice(0, 15) : []);

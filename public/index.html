@@ -220,6 +220,11 @@ label.field span.muted { font-weight: 400; }
 .outcome button.res.mild b { color: #e8b44c; }
 .outcome button.res.upset b { color: #ff8a7a; }
 .outcome button.res[aria-pressed="true"] { border-color: currentColor; }
+#tag-box { display: grid; gap: 8px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tag { border: 1.5px solid #3f3834; background: #29241f; color: var(--overlay-ink); border-radius: 999px; padding: 7px 12px; font-size: 0.88rem; font-weight: 700; }
+.tag[aria-pressed="true"] { background: #e39a57; border-color: #e39a57; color: #1e1205; }
+.tag.add { border-style: dashed; color: #b4aaa0; }
 .outcome input, .outcome select { background: #29241f; border-color: #3f3834; color: var(--overlay-ink); color-scheme: dark; }
 .stages { display: grid; gap: 8px; }
 .stages button { text-align: left; border: 1.5px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
@@ -565,7 +570,7 @@ import * as P from "/plan.js";
       if (r) right = `<button class="pill-btn" data-act="edit-rep" data-d="${t}" data-i="${i}" aria-label="Change rep ${i + 1}">${r.result === "skip" ? `<span class="pill skip">Skipped</span>` : `<span class="pill ${r.result}">${RESULTS[r.result].label}${r.actual && r.actual !== r.target ? ` · ${fmt(r.actual)}` : ""}</span>`}<span class="edit-mark" aria-hidden="true">✎</span></button>`;
       else if (i === nextIdx && !rest) right = `<button class="btn sm" data-act="start" data-i="${i}">Start</button>`;
       else right = `<span class="small muted">to do</span>`;
-      const sub = r && r.by ? `<div class="sub">${esc(personName(r.by))}${r.at ? " · " + timeOf(r.at) : ""}${r.note ? " · " + esc(r.note) : ""}</div>` : i === nextIdx && !rest ? `<div class="sub">Up next</div>` : "";
+      const sub = r && r.by ? `<div class="sub">${esc(personName(r.by))}${r.at ? " · " + timeOf(r.at) : ""}${r.tags && r.tags.length ? " · " + esc(r.tags.join(", ")) : ""}${r.note ? " · " + esc(r.note) : ""}</div>` : i === nextIdx && !rest ? `<div class="sub">Up next</div>` : "";
       const cls = ["rep", r ? "r-" + r.result : "", i === nextIdx && !rest ? "next" : "", i === topIdx ? "top" : ""].filter(Boolean).join(" ");
       return `<li class="${cls}"><span class="idx">${i + 1}</span><div><div class="dur">${fmt(target)}</div><div class="len"><i style="width:${Math.max(4, (target / maxTarget) * 100).toFixed(0)}%"></i></div>${sub}</div>${right}</li>`;
     }).join("");
@@ -640,10 +645,17 @@ import * as P from "/plan.js";
       <b>${Math.round((x.calm / x.n) * 100)}%</b></div>`).join("");
     const byTime = group(r => r.at && part(r.at), ["Morning", "Afternoon", "Evening", "Night"]);
     const byWho = group(r => r.by && (realNames ? r.by : personName(r.by)));
+    // Each tag, how often, coloured by the result it's usually logged with.
+    const signs = tagCounts(reps).slice(0, 12).map(([t, n]) => {
+      const by = { calm: 0, mild: 0, upset: 0 };
+      for (const r of reps) if ((r.tags || []).includes(t)) by[r.result]++;
+      return [t, n, Object.entries(by).sort((a, b) => b[1] - a[1])[0][0]];
+    });
     return `<div class="card">
       <div class="card-head"><h2>What works best</h2><span class="small muted">% calm reps</span></div>
       <div class="eyebrow">Time of day</div>${rows(byTime)}
       ${byWho.length > 1 ? `<div class="eyebrow">Who trained</div>${rows(byWho)}` : ""}
+      ${signs.length ? `<div class="eyebrow">Signs you've seen</div><div class="dots">${signs.map(([t, n, res]) => `<span class="dot ${res}">${esc(t)} ×${n}</span>`).join("")}</div>` : ""}
       ${reps.length < 20 ? `<p class="small muted">Only ${reps.length} reps so far. Give it a couple of weeks before reading much into this.</p>` : ""}
     </div>`;
   }
@@ -699,16 +711,17 @@ import * as P from "/plan.js";
             const done = (s.reps || []).filter(x => x.result).sort((a, b) => a.i - b.i);
             const who = [...new Set(done.map(x => x.by).filter(Boolean))];
             const notes = [s.notes, ...done.filter(x => x.note).map(x => `rep ${x.i + 1}: ${x.note}`)].filter(Boolean).join(" · ");
+            const signs = tagLine(done);
             return `<tr class="rp-block"><td>${esc(niceDate(s.date, { weekday: "short", day: "numeric", month: "short" }))}${done.some(x => x.at) ? `<br><span class="muted">${timeOf(Math.min(...done.filter(x => x.at).map(x => x.at)))}</span>` : ""}</td>
               <td>${sessionMode(s) === "gate" ? "Gate" : "Door"}</td><td>${fmt(s.working)}</td>
-              <td><div class="dots">${done.map(x => `<span class="dot ${x.result === "skip" ? "none" : x.result}">${x.result === "skip" ? "skip" : fmt(x.actual || x.target)}</span>`).join("")}</div>${notes ? `<div class="muted" style="margin-top:4px">${esc(notes)}</div>` : ""}</td>
+              <td><div class="dots">${done.map(x => `<span class="dot ${x.result === "skip" ? "none" : x.result}">${x.result === "skip" ? "skip" : fmt(x.actual || x.target)}</span>`).join("")}</div>${signs ? `<div style="margin-top:4px">${signs}</div>` : ""}${notes ? `<div class="muted" style="margin-top:4px">${esc(notes)}</div>` : ""}</td>
               <td>${who.map(name).join(", ")}</td></tr>`;
           }).join("")}
         </tbody></table></div>
         <p class="rp-block small muted">Colours: <span class="dot calm">calm</span> <span class="dot mild">mild stress</span> <span class="dot upset">upset</span>. The time shown is how long the rep really lasted: shorter than planned means someone went back in early, longer means they stayed out longer because the dog was relaxed.</p>` : `<p class="rp-block muted">No training sessions in this period.</p>`}
         ${absences.length ? `<div class="rp-block"><h3>Real absences (left alone outside training)</h3></div>
         <table class="rp-table"><thead class="rp-block"><tr><th>Date</th><th>Time</th><th>How long</th><th>How it went</th><th>Note</th></tr></thead><tbody>
-          ${absences.map(a => `<tr class="rp-block"><td>${esc(niceDate(a.date, { weekday: "short", day: "numeric", month: "short" }))}</td><td>${timeOf(a.start)}</td><td>${fmt(a.seconds)}</td><td>${ABS_LABEL[a.result]}</td><td>${esc(a.note || "")}</td></tr>`).join("")}
+          ${absences.map(a => `<tr class="rp-block"><td>${esc(niceDate(a.date, { weekday: "short", day: "numeric", month: "short" }))}</td><td>${timeOf(a.start)}</td><td>${fmt(a.seconds)}</td><td>${ABS_LABEL[a.result]}${a.tags && a.tags.length ? `<br><span class="muted">${esc(a.tags.join(", "))}</span>` : ""}</td><td>${esc(a.note || "")}</td></tr>`).join("")}
         </tbody></table>` : ""}
         <div class="rp-block small muted"><b style="color:var(--ink)">How the plan adjusts.</b> Each session has a longest rep, with shorter reps above and below it. All calm through the longest rep: next session about +15% (extra time added on a good day doesn't make the step bigger). Mild stress: −15%, or the same level if it only happened in extra time. Upset: stop for the day, next session at 60% of where it went wrong. Breaks of 4–6, 7–13 and 14+ days restart at 85%, 70% and 50%. An upset real absence makes the next session 25% easier.</div>
       </div>`;
@@ -815,6 +828,7 @@ import * as P from "/plan.js";
         <span class="pill ${a.result === "unknown" ? "skip" : a.result}">${ABS_LABEL[a.result]}</span>
         <button class="btn sm quiet" data-act="edit-absence" data-id="${esc(a.id)}">Change</button>
       </div>
+      ${a.tags && a.tags.length ? `<p class="small muted">${esc(a.tags.join(" · "))}</p>` : ""}
       ${a.note ? `<p class="small muted">${esc(a.note)}</p>` : ""}
     </div>`;
   }
@@ -828,6 +842,7 @@ import * as P from "/plan.js";
     return `<div class="session">
       <div class="session-head"><b>${esc(niceDate(s.date, { weekday: "short", day: "numeric", month: "short" }))} <span class="stage-tag">${sessionMode(s) === "gate" ? "Gate" : "Door"}</span></b><span class="small muted num">${done.some(r => r.at) ? timeOf(Math.min(...done.filter(r => r.at).map(r => r.at))) + " · " : ""}Longest ${fmt(s.working)}${best ? ` · best calm ${fmt(best)}` : ""}</span></div>
       <div class="dots">${done.map(r => `<span class="dot ${r.result === "skip" ? "none" : r.result}" title="${r.result === "skip" ? "Skipped" : RESULTS[r.result].label}${r.at ? " at " + timeOf(r.at) : ""}">${fmt(r.actual || r.target)}</span>`).join("")}</div>
+      ${tagLine(done) ? `<p class="small muted">${tagLine(done)}</p>` : ""}
       <div class="row" style="justify-content:space-between">
         <div class="row">${who.map(name => `<span class="who">${esc(personName(name))}</span>`).join("")}</div>
         ${s.notes || done.some(r => r.note) ? `<button class="btn sm quiet" data-act="toggle-hist" data-d="${s.date}">${open ? "Hide notes" : "Notes"}</button>` : ""}
@@ -1108,20 +1123,22 @@ import * as P from "/plan.js";
       <div><p class="eyebrow">Rep ${tm.i + 1} · ${early ? `${fmt(tm.actual)} of ${fmt(tm.target)}` : over ? `${fmt(tm.actual)}, planned ${fmt(tm.target)}` : fmt(tm.target)}</p><h2 style="margin-top:6px">How was ${esc(dog())}?</h2></div>
       <div class="outcome">
         ${Object.entries(RESULTS).map(([k, v]) => `<button class="res ${k}" data-res="${k}" aria-pressed="${!early && k === "calm"}"><b>${v.label}</b><span>${v.hint}</span></button>`).join("")}
+        <div id="tag-box"></div>
         <input type="text" id="t-note" placeholder="Note (optional)" autocomplete="off">
         <div class="row"><button class="btn" id="t-save">Save rep</button><button class="btn quiet" id="t-skip">Didn't do it</button></div>
       </div>`;
     tm.result = early ? null : "calm";
-    overlay.querySelectorAll(".res").forEach(b => (b.onclick = () => { tm.result = b.dataset.res; overlay.querySelectorAll(".res").forEach(x => x.setAttribute("aria-pressed", x === b)); }));
-    overlay.querySelector("#t-save").onclick = () => { if (!tm.result) return toast("Pick how it went first."); recordRep(tm.result, overlay.querySelector("#t-note").value.trim()); };
+    const picker = tagPicker(tm.result, []);
+    wireResults(v => { tm.result = v; picker.setResult(v); });
+    overlay.querySelector("#t-save").onclick = () => { if (!tm.result) return toast("Pick how it went first."); recordRep(tm.result, overlay.querySelector("#t-note").value.trim(), picker.tags()); };
     overlay.querySelector("#t-skip").onclick = () => recordRep("skip", "");
   }
 
-  function recordRep(result, note) {
+  function recordRep(result, note, tags = []) {
     const tm = state.timer, t = todayStr();
     const s = state.sessions.get(t) || ensureToday();
     if (result === "upset") state.ignoreUpset = false;
-    saveReps(t, [{ i: tm.i, target: tm.target, actual: result === "skip" ? 0 : tm.actual, result, note, by: state.me, startedAt: tm.start, at: Date.now() }]);
+    saveReps(t, [{ i: tm.i, target: tm.target, actual: result === "skip" ? 0 : tm.actual, result, tags: result === "skip" ? [] : tags, note, by: state.me, startedAt: tm.start, at: Date.now() }]);
     closeTimer();
   }
 
@@ -1132,6 +1149,54 @@ import * as P from "/plan.js";
     wakeLock = null;
     render();
   }
+
+  // ---------- tags: what you saw, picked after the result ----------
+  const TAGS = {
+    calm: ["Lay down", "Settled on bed", "Slept", "Busy with a chew", "Sniffed around", "Slow to greet"],
+    mild: ["Whined", "Paced", "Waited by the gate or door", "Listened at the door", "Yawned or lip-licked", "Left the chew", "Panted"],
+    upset: ["Barked", "Howled", "Scratched gate or door", "Heavy panting", "Drooled", "Tried to get out", "Had an accident", "Frantic greeting"],
+  };
+  const tagsFor = result => (TAGS[result] || []).concat(((state.config && state.config.customTags) || {})[result] || []);
+  function addCustomTag(result, label) {
+    const custom = { ...(state.config.customTags || {}) };
+    if (tagsFor(result).includes(label)) return;
+    custom[result] = [...(custom[result] || []), label].slice(-20);
+    saveConfig({ customTags: custom });
+  }
+  // Draws the tag chips for the chosen result into #tag-box; tags that don't belong to a newly picked result are dropped.
+  function tagPicker(initialResult, initialTags) {
+    const picked = new Set(initialTags || []);
+    let result = initialResult;
+    const box = overlay.querySelector("#tag-box");
+    const draw = () => {
+      const list = tagsFor(result);
+      for (const t of [...picked]) if (!list.includes(t)) picked.delete(t);
+      box.innerHTML = TAGS[result] ? `<p class="eyebrow">What did you see? Optional</p>
+        <div class="tags">${list.map(t => `<button type="button" class="tag" data-tag="${esc(t)}" aria-pressed="${picked.has(t)}">${esc(t)}</button>`).join("")}<button type="button" class="tag add" data-add>+ Other</button></div>` : "";
+      box.querySelectorAll("[data-tag]").forEach(b => (b.onclick = () => {
+        const t = b.dataset.tag;
+        picked.has(t) ? picked.delete(t) : picked.add(t);
+        b.setAttribute("aria-pressed", picked.has(t));
+      }));
+      const add = box.querySelector("[data-add]");
+      if (add) add.onclick = () => {
+        add.outerHTML = `<span class="tags"><input type="text" id="tag-new" maxlength="40" placeholder="Your own tag" style="width:11rem"><button type="button" class="tag" data-add-ok>Add</button></span>`;
+        const input = box.querySelector("#tag-new");
+        const ok = () => { const v = input.value.trim(); if (v) { addCustomTag(result, v); picked.add(v); } draw(); };
+        box.querySelector("[data-add-ok]").onclick = ok;
+        input.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); ok(); } };
+        input.focus();
+      };
+    };
+    draw();
+    return { setResult(r) { result = r; draw(); }, tags: () => [...picked] };
+  }
+  const tagCounts = reps => {
+    const m = new Map();
+    for (const r of reps) for (const t of r.tags || []) m.set(t, (m.get(t) || 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  };
+  const tagLine = reps => tagCounts(reps).map(([t, n]) => esc(t) + (n > 1 ? ` ×${n}` : "")).join(" · ");
 
   // ---------- editing a logged rep, logging a real absence ----------
   function sheet(html) { overlay.hidden = false; overlay.innerHTML = html; }
@@ -1150,17 +1215,19 @@ import * as P from "/plan.js";
       <div><p class="eyebrow">${esc(niceDate(date, { weekday: "short", day: "numeric", month: "short" }))} · rep ${i + 1} · planned ${fmt(r.target)}</p><h2 style="margin-top:6px">Change this rep</h2></div>
       <div class="outcome">
         ${resultButtons(result)}
+        <div id="tag-box"></div>
         <input type="text" id="e-actual" value="${r.result === "skip" ? "" : fmt(r.actual || r.target)}" placeholder="How long it lasted, e.g. 1m 30s" autocomplete="off">
         <input type="text" id="e-note" value="${esc(r.note || "")}" placeholder="Note (optional)" autocomplete="off">
         <div class="row"><button class="btn" id="e-save">Save changes</button><button class="btn quiet" id="e-delete">Delete rep</button><button class="btn quiet" id="e-cancel">Cancel</button></div>
       </div>`);
-    wireResults(v => (result = v));
+    const picker = tagPicker(result, r.tags);
+    wireResults(v => { result = v; picker.setResult(v); });
     overlay.querySelector("#e-cancel").onclick = closeSheet;
     overlay.querySelector("#e-delete").onclick = () => { deleteRep(date, i); closeSheet(); toast(`Rep ${i + 1} deleted. You can do it again.`); };
     overlay.querySelector("#e-save").onclick = () => {
       if (!result) return toast("Pick how it went first.");
       const actual = parseDur(overlay.querySelector("#e-actual").value) || r.target;
-      saveReps(date, [{ ...r, result, actual, note: overlay.querySelector("#e-note").value.trim(), editedBy: state.me, editedAt: Date.now() }]);
+      saveReps(date, [{ ...r, result, actual, tags: picker.tags(), note: overlay.querySelector("#e-note").value.trim(), editedBy: state.me, editedAt: Date.now() }]);
       closeSheet(); toast("Rep updated.");
     };
   }
@@ -1181,10 +1248,12 @@ import * as P from "/plan.js";
         </div>
         <input type="text" id="a-dur" value="${a ? fmt(a.seconds) : ""}" placeholder="How long, e.g. 2h or 45m" autocomplete="off">
         ${resultButtons(result, { unknown: { label: "Don't know", hint: "No camera, or didn't watch" } })}
+        <div id="tag-box"></div>
         <input type="text" id="a-note" value="${esc(a ? a.note : "")}" placeholder="Note (optional)" autocomplete="off">
         <div class="row"><button class="btn" id="a-save">Save</button>${a ? `<button class="btn quiet" id="a-delete">Delete</button>` : ""}<button class="btn quiet" id="a-cancel">Cancel</button></div>
       </div>`);
-    wireResults(v => (result = v));
+    const picker = tagPicker(result, a && a.tags);
+    wireResults(v => { result = v; picker.setResult(v); });
     overlay.querySelector("#a-cancel").onclick = closeSheet;
     if (a) overlay.querySelector("#a-delete").onclick = () => { deleteAbsence(a.id); closeSheet(); toast("Deleted."); };
     overlay.querySelector("#a-save").onclick = () => {
@@ -1195,7 +1264,7 @@ import * as P from "/plan.js";
       const date = dayVal === "today" ? todayStr() : dayVal === "yesterday" ? dateStr(new Date(now.getTime() - 864e5)) : dayVal;
       const [hh, mm] = (overlay.querySelector("#a-time").value || "12:00").split(":").map(Number);
       const start = new Date(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10), hh, mm).getTime();
-      saveAbsence({ id: a ? a.id : newId(), date, start, seconds, result, note: overlay.querySelector("#a-note").value.trim(), by: a ? a.by : state.me });
+      saveAbsence({ id: a ? a.id : newId(), date, start, seconds, result, tags: picker.tags(), note: overlay.querySelector("#a-note").value.trim(), by: a ? a.by : state.me });
       closeSheet(); toast("Saved.");
     };
   }

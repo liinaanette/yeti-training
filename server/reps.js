@@ -1,4 +1,4 @@
-import { RESULTS, allow, checkEnv, db, isDate, isPlainObject, requireUser } from "./lib.js";
+import { RESULTS, allow, checkEnv, cleanTags, db, isDate, isPlainObject, requireUser } from "./lib.js";
 
 // One row per rep, so two phones logging at once can never overwrite each other.
 // POST { date, reps: [rep, ...] } saves or replaces those reps. DELETE { date, i } removes one.
@@ -25,6 +25,7 @@ export default async function handler(req, res) {
     }
   }
   for (const r of reps) {
+    r.tags = cleanTags(r.tags);
     await sql`INSERT INTO reps (date, i, data) VALUES (${body.date}, ${r.i}, ${JSON.stringify(r)}::jsonb)
       ON CONFLICT (date, i) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`;
   }
