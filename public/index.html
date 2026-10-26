@@ -415,18 +415,35 @@ import * as P from "/plan.js";
     return s;
   }
   // Point a stage at a new level, and rebuild today's plan if no reps are done yet.
+  // Returns "now" when today's plan changed, "tomorrow" when it only applies from the next session.
   function setStage(mode, seconds) {
     const bases = { ...(state.config.bases || {}) };
     if (!bases.door && state.config.base) bases.door = state.config.base;
     if (seconds) bases[mode] = { seconds, setOn: todayStr(), setAt: Date.now() };
     saveConfig({ mode, bases });
     const t = todayStr(), s = state.sessions.get(t);
-    if (s && !doneReps(s).length) {
+    if (!s) return "now";
+    if (!doneReps(s).length) {
       const { w, why } = computeWorking(mode);
       saveSession(t, { mode, working: w, why, plan: buildPlan(w, t), cues: pickCues(t, mode), cuesDone: false });
-      return true;
+      return "now";
     }
-    return !s;
+    // Reps already done today: keep those, and move the rest of today's reps to the new level.
+    if (seconds && sessionMode(s) === mode) {
+      const w = roundDur(seconds);
+      const fresh = buildPlan(w, t);
+      const done = new Set((s.reps || []).filter(r => r.result).map(r => r.i));
+      const len = Math.max(fresh.length, Math.max(-1, ...done) + 1);
+      const plan = Array.from({ length: len }, (_, i) => (done.has(i) ? s.plan[i] : fresh[Math.min(i, fresh.length - 1)]));
+      const pending = plan.map((_, i) => i).filter(i => !done.has(i));
+      if (pending.length && !pending.some(i => plan[i] === w)) {
+        const top = pending.reduce((a, i) => (plan[i] > plan[a] ? i : a), pending[0]);
+        plan[top] = w; // keep the longest rep in what's left
+      }
+      saveSession(t, { working: w, why: `Level changed to ${fmt(w)} today.`, plan });
+      return "now";
+    }
+    return "tomorrow";
   }
   function saveConfig(patch) {
     let tz = null;
@@ -1327,7 +1344,7 @@ import * as P from "/plan.js";
       const v = typed ? parseDur(typed) : null;
       if (typed && !v) return toast("Type a time like 2m, 90s or 1:30, or leave it empty.");
       const seconds = v || (getBase(mode) ? null : STAGES[mode].defaultStart);
-      const now = setStage(mode, seconds);
+      const now = setStage(mode, seconds) === "now";
       state.stagePick = null;
       toast(now ? `Switched to ${STAGES[mode].label.toLowerCase()}. Today's plan is updated.` : `Switched to ${STAGES[mode].label.toLowerCase()}. It starts with tomorrow's session, since reps are already done today.`);
     }
@@ -1351,8 +1368,11 @@ import * as P from "/plan.js";
     } else if (act === "set-base") {
       const v = parseDur(document.getElementById("set-base").value);
       if (!v) return toast("Type a time like 2m, 90s or 1:30.");
-      setStage(curMode(), v);
-      toast(`Level set to ${fmt(v)}.`);
+      const when = setStage(curMode(), v);
+      const s = state.sessions.get(t);
+      toast(when === "tomorrow" ? `Level set to ${fmt(v)}. It starts with tomorrow's session.`
+        : s && doneReps(s).length ? `Level set to ${fmt(roundDur(v))}. The rest of today's reps use it.`
+        : `Level set to ${fmt(roundDur(v))}. Today's plan is updated.`);
     }
   });
 
