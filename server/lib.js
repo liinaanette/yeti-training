@@ -150,3 +150,4 @@ export async function loadAll(sql) {
 
 // Tags are short labels the owners pick after a result ("Lay down", "Whined", or their own).
 export const cleanTags = v => (Array.isArray(v) ? [...new Set(v.filter(t => typeof t === "string").map(t => t.trim().slice(0, 40)).filter(Boolean))].slice(0, 15) : []);
+export const SETUPS = ["gate", "gate-open", "free"];

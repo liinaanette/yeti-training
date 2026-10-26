@@ -410,7 +410,7 @@ import * as P from "/plan.js";
     if (state.sessions.get(t)) return state.sessions.get(t);
     const mode = curMode();
     const { w, why } = computeWorking(mode);
-    const s = { date: t, mode, working: w, why, plan: buildPlan(w, t), cues: pickCues(t, mode), cuesDone: false, reps: [], notes: "", createdAt: Date.now() };
+    const s = { date: t, mode, setup: lastSetup(), working: w, why, plan: buildPlan(w, t), cues: pickCues(t, mode), cuesDone: false, reps: [], notes: "", createdAt: Date.now() };
     saveSession(t, s, true);
     return s;
   }
@@ -590,6 +590,7 @@ import * as P from "/plan.js";
       ${banner}
       <div class="card">
         <div><h2>Before you start</h2><p class="why">${esc(s ? s.why : computed.why)}</p></div>
+        <div style="display:grid;gap:8px"><span class="eyebrow">Setup: how ${esc(dog())} is left</span>${setupButtons((s && s.setup) || lastSetup(), "set-setup")}</div>
         <div class="cues">
           <div>${hint("cues", "Why departure cues?", `Do each one 5 times, then sit back down. Don't leave. This takes the meaning out of the signals ${esc(dog())} watches for.`)}</div>
           <div class="cue-list">${cues.map(c => `<span class="chip">${esc(c)}</span>`).join("")}</div>
@@ -632,7 +633,7 @@ import * as P from "/plan.js";
 
   // Calm share of reps by time of day and by person, from each rep's saved time.
   function insightsCard(list, realNames = false) {
-    const reps = list.flatMap(s => doneReps(s).map(r => ({ ...r, date: s.date })));
+    const reps = list.flatMap(s => doneReps(s).map(r => ({ ...r, date: s.date, setup: r.setup || s.setup })));
     if (!reps.length) return "";
     const part = ts => { const h = new Date(ts).getHours(); return h < 5 ? "Night" : h < 12 ? "Morning" : h < 17 ? "Afternoon" : h < 22 ? "Evening" : "Night"; };
     const group = (keyFn, order) => {
@@ -645,6 +646,7 @@ import * as P from "/plan.js";
       <b>${Math.round((x.calm / x.n) * 100)}%</b></div>`).join("");
     const byTime = group(r => r.at && part(r.at), ["Morning", "Afternoon", "Evening", "Night"]);
     const byWho = group(r => r.by && (realNames ? r.by : personName(r.by)));
+    const bySetup = group(r => SETUPS[r.setup], Object.values(SETUPS));
     // Each tag, how often, coloured by the result it's usually logged with.
     const signs = tagCounts(reps).slice(0, 12).map(([t, n]) => {
       const by = { calm: 0, mild: 0, upset: 0 };
@@ -655,6 +657,7 @@ import * as P from "/plan.js";
       <div class="card-head"><h2>What works best</h2><span class="small muted">% calm reps</span></div>
       <div class="eyebrow">Time of day</div>${rows(byTime)}
       ${byWho.length > 1 ? `<div class="eyebrow">Who trained</div>${rows(byWho)}` : ""}
+      ${bySetup.length > 1 ? `<div class="eyebrow">By setup</div>${rows(bySetup)}` : ""}
       ${signs.length ? `<div class="eyebrow">Signs you've seen</div><div class="dots">${signs.map(([t, n, res]) => `<span class="dot ${res}">${esc(t)} ×${n}</span>`).join("")}</div>` : ""}
       ${reps.length < 20 ? `<p class="small muted">Only ${reps.length} reps so far. Give it a couple of weeks before reading much into this.</p>` : ""}
     </div>`;
@@ -706,14 +709,14 @@ import * as P from "/plan.js";
           <div class="legend"><span><i style="background:var(--accent)"></i>Longest planned rep</span><span><i style="background:var(--calm)"></i>Longest calm rep</span><span><i style="background:var(--upset)"></i>Got upset</span></div></div>` : ""}
         ${list.length ? `<div class="rp-block">${insightsCard(list.slice().reverse(), true)}</div>` : ""}
         ${list.length ? `<div class="rp-block"><h3>Sessions</h3></div>
-        <div class="rp-scroll"><table class="rp-table"><thead class="rp-block"><tr><th>Date</th><th>Stage</th><th>Longest</th><th>Reps (length, result)</th><th>Who</th></tr></thead><tbody>
+        <div class="rp-scroll"><table class="rp-table"><thead class="rp-block"><tr><th>Date</th><th>Stage, setup</th><th>Longest</th><th>Reps (length, result)</th><th>Who</th></tr></thead><tbody>
           ${list.map(s => {
             const done = (s.reps || []).filter(x => x.result).sort((a, b) => a.i - b.i);
             const who = [...new Set(done.map(x => x.by).filter(Boolean))];
             const notes = [s.notes, ...done.filter(x => x.note).map(x => `rep ${x.i + 1}: ${x.note}`)].filter(Boolean).join(" · ");
             const signs = tagLine(done);
             return `<tr class="rp-block"><td>${esc(niceDate(s.date, { weekday: "short", day: "numeric", month: "short" }))}${done.some(x => x.at) ? `<br><span class="muted">${timeOf(Math.min(...done.filter(x => x.at).map(x => x.at)))}</span>` : ""}</td>
-              <td>${sessionMode(s) === "gate" ? "Gate" : "Door"}</td><td>${fmt(s.working)}</td>
+              <td>${sessionMode(s) === "gate" ? "Gate" : "Door"}${s.setup ? `<br><span class="muted">${esc(SETUPS[s.setup] || "")}</span>` : ""}</td><td>${fmt(s.working)}</td>
               <td><div class="dots">${done.map(x => `<span class="dot ${x.result === "skip" ? "none" : x.result}">${x.result === "skip" ? "skip" : fmt(x.actual || x.target)}</span>`).join("")}</div>${signs ? `<div style="margin-top:4px">${signs}</div>` : ""}${notes ? `<div class="muted" style="margin-top:4px">${esc(notes)}</div>` : ""}</td>
               <td>${who.map(name).join(", ")}</td></tr>`;
           }).join("")}
@@ -823,7 +826,7 @@ import * as P from "/plan.js";
   const ABS_LABEL = { calm: "Calm", mild: "Mild stress", upset: "Upset", unknown: "Not watched" };
   function absenceCard(a) {
     return `<div class="session">
-      <div class="session-head"><b>${esc(niceDate(a.date, { weekday: "short", day: "numeric", month: "short" }))} <span class="stage-tag">Alone</span></b><span class="small muted num">${timeOf(a.start)} · ${fmt(a.seconds)}</span></div>
+      <div class="session-head"><b>${esc(niceDate(a.date, { weekday: "short", day: "numeric", month: "short" }))} <span class="stage-tag">Alone</span>${a.setup ? ` <span class="small muted" style="font-weight:400">${esc(SETUPS[a.setup] || "")}</span>` : ""}</b><span class="small muted num">${timeOf(a.start)} · ${fmt(a.seconds)}</span></div>
       <div class="row" style="justify-content:space-between">
         <span class="pill ${a.result === "unknown" ? "skip" : a.result}">${ABS_LABEL[a.result]}</span>
         <button class="btn sm quiet" data-act="edit-absence" data-id="${esc(a.id)}">Change</button>
@@ -840,7 +843,7 @@ import * as P from "/plan.js";
     const who = [...new Set(done.map(r => r.by).filter(Boolean))];
     const open = state.openHistory.has(s.date);
     return `<div class="session">
-      <div class="session-head"><b>${esc(niceDate(s.date, { weekday: "short", day: "numeric", month: "short" }))} <span class="stage-tag">${sessionMode(s) === "gate" ? "Gate" : "Door"}</span></b><span class="small muted num">${done.some(r => r.at) ? timeOf(Math.min(...done.filter(r => r.at).map(r => r.at))) + " · " : ""}Longest ${fmt(s.working)}${best ? ` · best calm ${fmt(best)}` : ""}</span></div>
+      <div class="session-head"><b>${esc(niceDate(s.date, { weekday: "short", day: "numeric", month: "short" }))} <span class="stage-tag">${sessionMode(s) === "gate" ? "Gate" : "Door"}</span>${s.setup ? ` <span class="small muted" style="font-weight:400">${esc(SETUPS[s.setup] || "")}</span>` : ""}</b><span class="small muted num">${done.some(r => r.at) ? timeOf(Math.min(...done.filter(r => r.at).map(r => r.at))) + " · " : ""}Longest ${fmt(s.working)}${best ? ` · best calm ${fmt(best)}` : ""}</span></div>
       <div class="dots">${done.map(r => `<span class="dot ${r.result === "skip" ? "none" : r.result}" title="${r.result === "skip" ? "Skipped" : RESULTS[r.result].label}${r.at ? " at " + timeOf(r.at) : ""}">${fmt(r.actual || r.target)}</span>`).join("")}</div>
       ${tagLine(done) ? `<p class="small muted">${tagLine(done)}</p>` : ""}
       <div class="row" style="justify-content:space-between">
@@ -1138,7 +1141,7 @@ import * as P from "/plan.js";
     const tm = state.timer, t = todayStr();
     const s = state.sessions.get(t) || ensureToday();
     if (result === "upset") state.ignoreUpset = false;
-    saveReps(t, [{ i: tm.i, target: tm.target, actual: result === "skip" ? 0 : tm.actual, result, tags: result === "skip" ? [] : tags, note, by: state.me, startedAt: tm.start, at: Date.now() }]);
+    saveReps(t, [{ i: tm.i, target: tm.target, actual: result === "skip" ? 0 : tm.actual, result, tags: result === "skip" ? [] : tags, note, setup: (state.sessions.get(t) || {}).setup || lastSetup(), by: state.me, startedAt: tm.start, at: Date.now() }]);
     closeTimer();
   }
 
@@ -1149,6 +1152,12 @@ import * as P from "/plan.js";
     wakeLock = null;
     render();
   }
+
+  // ---------- setup: how the dog is left during a session ----------
+  const SETUPS = { gate: "Behind the gate", "gate-open": "Gate open", free: "Free in the flat" };
+  const SETUP_ORDER = Object.keys(SETUPS); // easiest first
+  const lastSetup = () => (state.config && SETUPS[state.config.lastSetup] ? state.config.lastSetup : "gate");
+  const setupButtons = (selected, act) => `<div class="periods">${SETUP_ORDER.map(k => `<button type="button" data-act="${act}" data-v="${k}" aria-pressed="${k === selected}">${SETUPS[k]}</button>`).join("")}</div>`;
 
   // ---------- tags: what you saw, picked after the result ----------
   const TAGS = {
@@ -1247,6 +1256,7 @@ import * as P from "/plan.js";
           <input type="time" id="a-time" value="${pad(startDefault.getHours())}:${pad(startDefault.getMinutes())}" style="flex:1">
         </div>
         <input type="text" id="a-dur" value="${a ? fmt(a.seconds) : ""}" placeholder="How long, e.g. 2h or 45m" autocomplete="off">
+        <select id="a-setup" aria-label="How ${esc(dog())} was left">${SETUP_ORDER.map(k => `<option value="${k}" ${k === ((a && a.setup) || "free") ? "selected" : ""}>${SETUPS[k]}</option>`).join("")}</select>
         ${resultButtons(result, { unknown: { label: "Don't know", hint: "No camera, or didn't watch" } })}
         <div id="tag-box"></div>
         <input type="text" id="a-note" value="${esc(a ? a.note : "")}" placeholder="Note (optional)" autocomplete="off">
@@ -1264,7 +1274,7 @@ import * as P from "/plan.js";
       const date = dayVal === "today" ? todayStr() : dayVal === "yesterday" ? dateStr(new Date(now.getTime() - 864e5)) : dayVal;
       const [hh, mm] = (overlay.querySelector("#a-time").value || "12:00").split(":").map(Number);
       const start = new Date(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10), hh, mm).getTime();
-      saveAbsence({ id: a ? a.id : newId(), date, start, seconds, result, tags: picker.tags(), note: overlay.querySelector("#a-note").value.trim(), by: a ? a.by : state.me });
+      saveAbsence({ id: a ? a.id : newId(), date, start, seconds, setup: overlay.querySelector("#a-setup").value, result, tags: picker.tags(), note: overlay.querySelector("#a-note").value.trim(), by: a ? a.by : state.me });
       closeSheet(); toast("Saved.");
     };
   }
@@ -1281,6 +1291,18 @@ import * as P from "/plan.js";
     const act = b.dataset.act, t = todayStr();
     if (act === "start") startRep(+b.dataset.i);
     else if (act === "edit-rep") editRep(b.dataset.d, +b.dataset.i);
+    else if (act === "set-setup") {
+      const v = b.dataset.v, s = ensureToday();
+      const prev = s.setup || lastSetup();
+      if (v === prev) return;
+      saveSession(t, { setup: v });
+      saveConfig({ lastSetup: v });
+      if (SETUP_ORDER.indexOf(v) > SETUP_ORDER.indexOf(prev)) {
+        toast(doneReps(s).length
+          ? `Setup changed to "${SETUPS[v].toLowerCase()}". This is harder for ${dog()}: keep the rest of today's reps short.`
+          : `"${SETUPS[v]}" is harder for ${dog()}. Consider lowering the level in Settings → Reset the level.`);
+      }
+    }
     else if (act === "open-report") { state.tab = "report"; render(); window.scrollTo(0, 0); }
     else if (act === "back-history") { state.tab = "history"; render(); window.scrollTo(0, 0); }
     else if (act === "report-period") { state.report = { ...(state.report || {}), period: b.dataset.p }; render(); }

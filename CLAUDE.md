@@ -17,7 +17,7 @@ A phone-first web app two people (the dog's owners) use to run separation-anxiet
 ## Data model (Postgres, created automatically on first request)
 
 - `config` (one row, id `main`): dog name, stage (`mode`: `gate` | `door`), per-stage starting levels (`bases`), sessions per week, session cap, time zone.
-- `sessions` (one row per local date `YYYY-MM-DD`): stage, working (longest rep) seconds, plan (array of rep seconds), cues, notes.
+- `sessions` (one row per local date `YYYY-MM-DD`): stage, `setup` (how the dog is left: `gate` | `gate-open` | `free`; last used kept in `config.lastSetup`), working (longest rep) seconds, plan (array of rep seconds), cues, notes. Each rep and absence also stores its own `setup`. Setup doesn't change the plan maths; owners reset the level when moving to a harder setup.
 - `reps` (one row per rep, key `date + i`): target, actual, result (`calm` | `mild` | `upset` | `skip`), `tags` (labels picked after the result; lists in `TAGS` in index.html, the owners' own in `config.customTags`), trainer name, `startedAt`/`at` timestamps. Kept separate from sessions so two phones can't overwrite each other.
 - `absences`: real times alone outside training.
 - `push_subs`: one row per phone with notification preferences (`morning`, `evening`, `weekly`).
