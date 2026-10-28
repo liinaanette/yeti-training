@@ -10,9 +10,10 @@ A phone-first web app two people (the dog's owners) use to run separation-anxiet
 - `public/vendor/` – html2canvas 1.4.1 and jsPDF 2.5.1, loaded only when exporting the report.
 - `api/app.js` – the **only** serverless function. `vercel.json` rewrites every `/api/<route>` to it as `?route=<route>`, and it dispatches to a handler in `server/`. Vercel's Hobby plan allows at most 12 functions per deployment, so never add files to `api/`: add a handler in `server/` and register it in the `routes` map in `api/app.js`.
 - `server/lib.js` – DB connection, table creation/migrations, auth cookie helpers, `loadAll()`.
-- `server/cron.js` – daily reminder jobs, reached as `/api/cron-morning` and `/api/cron-evening` (schedules in `vercel.json`, UTC). Sunday evening also sends the weekly summary.
+- `server/reminders.js` – daily reminders. Each phone has its own `morningTime`/`eveningTime`/`tz` in `push_subs.prefs`. `/api/cron-daily` (00:00 UTC) books each phone's next morning and evening reminder in QStash (`push_subs.scheduled` keeps the message ids); QStash calls `/api/reminder-fire`, which builds the message at send time. Changing times in Settings re-books immediately. Without QStash only `/api/cron-evening` (16:00 UTC) sends, at a fixed time. Sunday's evening slot also sends the weekly summary.
+- `server/qstash.js` – publish / cancel / signature check for QStash. `server/time.js` – time-zone helpers (tested in `test/time.test.js`).
 - `server/rep-alert.js` + `server/rep-alert-fire.js` – "time's up" push at the end of a rep, scheduled through Upstash QStash (optional; needs `QSTASH_*` env). The fire endpoint only accepts QStash-signed requests.
-- `test/plan.test.js` – unit tests for `plan.js`. Run `npm test`.
+- `test/` – unit tests for `plan.js` and `server/time.js`. Run `npm test`.
 
 ## Data model (Postgres, created automatically on first request)
 
@@ -20,7 +21,7 @@ A phone-first web app two people (the dog's owners) use to run separation-anxiet
 - `sessions` (one row per local date `YYYY-MM-DD`): stage, `setup` (how the dog is left: `gate` | `gate-open` | `free`; last used kept in `config.lastSetup`), working (longest rep) seconds, plan (array of rep seconds), cues, notes. Each rep and absence also stores its own `setup`. Setup doesn't change the plan maths; owners reset the level when moving to a harder setup.
 - `reps` (one row per rep, key `date + i`): target, actual, result (`calm` | `mild` | `upset` | `skip`), `tags` (labels picked after the result; lists in `TAGS` in index.html, the owners' own in `config.customTags`), trainer name, `startedAt`/`at` timestamps. Kept separate from sessions so two phones can't overwrite each other.
 - `absences`: real times alone outside training.
-- `push_subs`: one row per phone with notification preferences (`morning`, `evening`, `weekly`).
+- `push_subs`: one row per phone with notification preferences (`morning`, `evening`, `weekly`, `morningTime`, `eveningTime`, `tz`) and `scheduled` (booked QStash reminders).
 - `login_attempts`: wrong-password limiter (10 per 15 min per IP).
 
 Sessions PATCH (`server/sessions.js`, at `/api/sessions/<date>`) merges top-level fields; with `create: true` existing fields win. Never put reps back into the session document.

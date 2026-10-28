@@ -27,6 +27,7 @@ export async function db() {
         prefs jsonb NOT NULL DEFAULT '{"morning": true, "evening": true}',
         created_at timestamptz NOT NULL DEFAULT now()
       )`;
+      await sql`ALTER TABLE push_subs ADD COLUMN IF NOT EXISTS scheduled jsonb NOT NULL DEFAULT '{}'`;
       await sql`CREATE TABLE IF NOT EXISTS sessions (
         date text PRIMARY KEY,
         data jsonb NOT NULL,

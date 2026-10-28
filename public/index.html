@@ -237,6 +237,8 @@ label.field span.muted { font-weight: 400; }
 .insight .track i { display: block; height: 100%; }
 .insight b { font-variant-numeric: tabular-nums; text-align: right; }
 .download { color: var(--accent); font-weight: 700; text-decoration: none; }
+.remind-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.remind-row input[type="time"] { width: auto; min-width: 7.5rem; }
 .periods { display: flex; flex-wrap: wrap; gap: 6px; }
 .periods button { border: 1.5px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: 0.88rem; }
 .periods button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
@@ -965,6 +967,7 @@ import * as P from "/plan.js";
       if (push.sub) {
         const r = await api(`/api/push?endpoint=${encodeURIComponent(push.sub.endpoint)}`);
         push.prefs = r.subscribed ? r.prefs : null;
+        push.customTimes = !!r.customTimes;
       }
     } catch (e) { push.error = e.message; }
     push.ready = true;
@@ -982,14 +985,17 @@ import * as P from "/plan.js";
     const { publicKey } = await api("/api/push");
     push.reg = push.reg || await navigator.serviceWorker.register("/sw.js");
     push.sub = (await push.reg.pushManager.getSubscription()) || await push.reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
-    const r = await api("/api/push", { method: "POST", body: JSON.stringify({ subscription: push.sub.toJSON(), prefs: { morning: true, evening: true, weekly: true } }) });
+    const r = await api("/api/push", { method: "POST", body: JSON.stringify({ subscription: push.sub.toJSON(), prefs: { morning: true, evening: true, weekly: true, tz: phoneTz() } }) });
     push.prefs = r.prefs;
     await api("/api/push", { method: "POST", body: JSON.stringify({ test: true, endpoint: push.sub.endpoint }) });
     toast("Reminders are on. A test notification is on its way.");
   });
+  const phoneTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { return undefined; } };
   const savePushPrefs = prefs => pushAction(async () => {
-    const r = await api("/api/push", { method: "POST", body: JSON.stringify({ subscription: push.sub.toJSON(), prefs }) });
+    push.prefs = { ...push.prefs, ...prefs }; // show the new choice while it saves
+    const r = await api("/api/push", { method: "POST", body: JSON.stringify({ subscription: push.sub.toJSON(), prefs: { ...prefs, tz: phoneTz() } }) });
     push.prefs = r.prefs;
+    push.customTimes = !!r.customTimes;
   });
   const testPush = () => pushAction(async () => {
     await api("/api/push", { method: "POST", body: JSON.stringify({ test: true, endpoint: push.sub.endpoint }) });
@@ -1013,8 +1019,8 @@ import * as P from "/plan.js";
       inner = `<p class="small muted">Checking this phone…</p>`;
     } else if (push.sub && push.prefs) {
       inner = `
-        <label class="check"><input type="checkbox" id="push-morning" ${push.prefs.morning ? "checked" : ""} ${push.busy ? "disabled" : ""}> Morning: today's plan</label>
-        <label class="check"><input type="checkbox" id="push-evening" ${push.prefs.evening ? "checked" : ""} ${push.busy ? "disabled" : ""}> Evening: nudge if nobody has trained yet</label>
+        <div class="remind-row"><label class="check"><input type="checkbox" id="push-morning" ${push.prefs.morning ? "checked" : ""} ${push.busy ? "disabled" : ""}> Morning: today's plan</label>${push.customTimes ? `<input type="time" id="push-morning-time" value="${esc(push.prefs.morningTime || "08:30")}" aria-label="Morning reminder time" ${push.busy || !push.prefs.morning ? "disabled" : ""}>` : ""}</div>
+        <div class="remind-row"><label class="check"><input type="checkbox" id="push-evening" ${push.prefs.evening ? "checked" : ""} ${push.busy ? "disabled" : ""}> Evening: nudge if nobody has trained yet</label>${push.customTimes ? `<input type="time" id="push-evening-time" value="${esc(push.prefs.eveningTime || "19:00")}" aria-label="Evening reminder time" ${push.busy || (!push.prefs.evening && push.prefs.weekly === false) ? "disabled" : ""}>` : ""}</div>
         <label class="check"><input type="checkbox" id="push-weekly" ${push.prefs.weekly !== false ? "checked" : ""} ${push.busy ? "disabled" : ""}> Sunday evening: summary of the week</label>
         <p class="small muted">During reps you'll also get a "time's up" alert, even if the phone is locked.</p>
         <div class="row"><button class="btn sm quiet" data-act="push-test" ${push.busy ? "disabled" : ""}>Send a test</button><button class="btn sm ghost" data-act="push-off" ${push.busy ? "disabled" : ""}>Turn off on this phone</button></div>`;
@@ -1022,7 +1028,7 @@ import * as P from "/plan.js";
       inner = `<button class="btn" data-act="push-on" ${push.busy ? "disabled" : ""}>Turn on reminders on this phone</button>`;
     }
     return `<div class="card">
-      <div><h2>Reminders</h2><p class="small muted">Each of you turns this on on your own phone. Morning comes around 7–8, the evening nudge around 6–7.</p></div>
+      <div><h2>Reminders</h2><p class="small muted">Each of you turns this on on your own phone${push.customTimes ? " and picks your own times" : ""}.${push.sub && push.prefs && !push.customTimes ? " The evening nudge comes around 6–7. Morning reminders and your own times need QStash (see the README)." : ""}</p></div>
       ${inner}
       ${push.error ? `<p class="small" style="color:var(--upset)">${esc(push.error)}</p>` : ""}
     </div>`;
@@ -1381,8 +1387,15 @@ import * as P from "/plan.js";
       state.report = { ...state.report, period: "custom", from: document.getElementById("rp-from").value, to: document.getElementById("rp-to").value };
       render(); return;
     }
-    if (["push-morning", "push-evening", "push-weekly"].includes(e.target.id)) {
-      savePushPrefs({ morning: document.getElementById("push-morning").checked, evening: document.getElementById("push-evening").checked, weekly: document.getElementById("push-weekly").checked });
+    if (["push-morning", "push-evening", "push-weekly", "push-morning-time", "push-evening-time"].includes(e.target.id)) {
+      if (push.busy) return;
+      const val = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+      const picked = e.target.type === "time" ? e.target.value : null;
+      savePushPrefs({
+        morning: document.getElementById("push-morning").checked, evening: document.getElementById("push-evening").checked, weekly: document.getElementById("push-weekly").checked,
+        morningTime: val("push-morning-time") || push.prefs.morningTime, eveningTime: val("push-evening-time") || push.prefs.eveningTime,
+      });
+      if (picked) toast(`Reminder set for ${picked}.`);
       return;
     }
     if (e.target.id === "cues-done") { ensureToday(); saveSession(todayStr(), { cuesDone: e.target.checked }); }

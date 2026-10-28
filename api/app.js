@@ -3,7 +3,7 @@
 // The daily reminder jobs (vercel.json "crons") come in the same way.
 import absences from "../server/absences.js";
 import config from "../server/config.js";
-import { runReminders } from "../server/cron.js";
+import { cronDaily, cronEvening, reminderFire } from "../server/reminders.js";
 import exportCsv from "../server/export.js";
 import login from "../server/login.js";
 import logout from "../server/logout.js";
@@ -17,8 +17,7 @@ import state from "../server/state.js";
 
 const routes = {
   absences, config, export: exportCsv, login, logout, me, push, "rep-alert": repAlert, "rep-alert-fire": repAlertFire, reps, state,
-  "cron-morning": (req, res) => runReminders("morning", req, res),
-  "cron-evening": (req, res) => runReminders("evening", req, res),
+  "cron-daily": cronDaily, "cron-evening": cronEvening, "reminder-fire": reminderFire,
 };
 
 export default async function handler(req, res) {

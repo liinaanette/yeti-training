@@ -1,5 +1,8 @@
 import webpush from "web-push";
 import { allow, checkEnv, db, isPlainObject, pushConfigured, requireUser } from "./lib.js";
+import { qstashReady, siteOrigin } from "./qstash.js";
+import { DEFAULT_TIMES, cancelPhone, schedulePhone } from "./reminders.js";
+import { isClockTime, isTimeZone } from "./time.js";
 
 // GET: public key (and this phone's settings when ?endpoint= is given)
 // POST: save this phone's subscription and settings, or { test: true, endpoint } to send a test
@@ -15,11 +18,13 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     const endpoint = String(req.query.endpoint || "");
     const [row] = endpoint ? await sql`SELECT prefs FROM push_subs WHERE endpoint = ${endpoint}` : [];
-    return res.status(200).json({ publicKey: process.env.VAPID_PUBLIC_KEY, subscribed: !!row, prefs: row ? row.prefs : null });
+    const prefs = row ? { morningTime: DEFAULT_TIMES.morning, eveningTime: DEFAULT_TIMES.evening, ...row.prefs } : null;
+    return res.status(200).json({ publicKey: process.env.VAPID_PUBLIC_KEY, subscribed: !!row, prefs, customTimes: qstashReady() });
   }
 
   if (req.method === "DELETE") {
-    await sql`DELETE FROM push_subs WHERE endpoint = ${String(body.endpoint || "")}`;
+    const [row] = await sql`DELETE FROM push_subs WHERE endpoint = ${String(body.endpoint || "")} RETURNING scheduled`;
+    if (row) await cancelPhone(row);
     return res.status(200).json({ ok: true });
   }
 
@@ -35,9 +40,22 @@ export default async function handler(req, res) {
   if (!isPlainObject(sub) || typeof sub.endpoint !== "string" || !sub.endpoint.startsWith("https://")) {
     return res.status(400).json({ error: "Missing push subscription." });
   }
-  const on = key => (body.prefs ? body.prefs[key] !== false : true);
-  const prefs = { morning: on("morning"), evening: on("evening"), weekly: on("weekly") };
-  await sql`INSERT INTO push_subs (endpoint, name, sub, prefs) VALUES (${sub.endpoint}, ${name}, ${JSON.stringify(sub)}::jsonb, ${JSON.stringify(prefs)}::jsonb)
-    ON CONFLICT (endpoint) DO UPDATE SET name = EXCLUDED.name, sub = EXCLUDED.sub, prefs = EXCLUDED.prefs`;
-  res.status(200).json({ subscribed: true, prefs });
+  const given = body.prefs || {};
+  const on = key => given[key] !== false;
+  const prefs = {
+    morning: on("morning"), evening: on("evening"), weekly: on("weekly"),
+    morningTime: isClockTime(given.morningTime) ? given.morningTime : DEFAULT_TIMES.morning,
+    eveningTime: isClockTime(given.eveningTime) ? given.eveningTime : DEFAULT_TIMES.evening,
+    ...(isTimeZone(given.tz) ? { tz: given.tz } : {}),
+  };
+  const [row] = await sql`INSERT INTO push_subs (endpoint, name, sub, prefs) VALUES (${sub.endpoint}, ${name}, ${JSON.stringify(sub)}::jsonb, ${JSON.stringify(prefs)}::jsonb)
+    ON CONFLICT (endpoint) DO UPDATE SET name = EXCLUDED.name, sub = EXCLUDED.sub, prefs = EXCLUDED.prefs
+    RETURNING endpoint, name, prefs, scheduled`;
+  // Re-book this phone's reminders now, so a changed time counts from today.
+  let scheduled = null;
+  if (qstashReady()) {
+    const [cfg] = await sql`SELECT data FROM config WHERE id = 'main'`;
+    try { scheduled = await schedulePhone(sql, row, cfg ? cfg.data : null, siteOrigin(req)); } catch (err) { console.error("booking reminders failed", err.message); }
+  }
+  res.status(200).json({ subscribed: true, prefs, scheduled, customTimes: qstashReady() });
 }

@@ -1,21 +1,18 @@
 import { allow, checkEnv, db, requireUser } from "./lib.js";
+import { cancel, publish, qstashReady, siteOrigin } from "./qstash.js";
 
-// Schedules (POST) or cancels (DELETE) the "time's up" push for a running rep, using Upstash QStash
-// as the delayed scheduler. QStash calls api/rep-alert-fire at the end time, which sends the push.
-// Without QStash configured, POST answers { scheduled: false } and the app still shows the start notification.
+// Schedules (POST) or cancels (DELETE) the "time's up" push for a running rep. QStash calls
+// /api/rep-alert-fire at the end time, which sends the push. Without QStash, POST answers { scheduled: false }.
 // Delivery (QStash, a cold start, Apple/Google push) usually takes a few seconds, so ask for it early.
 const LEAD_MS = 3000;
-const qstashUrl = () => (process.env.QSTASH_URL || "https://qstash.upstash.io").replace(/\/$/, "");
 
 export default async function handler(req, res) {
   if (!allow(req, res, "POST", "DELETE") || !checkEnv(res) || !requireUser(req, res)) return;
-  if (!process.env.QSTASH_TOKEN) return res.status(200).json({ scheduled: false });
+  if (!qstashReady()) return res.status(200).json({ scheduled: false });
   const body = req.body || {};
-  const auth = { Authorization: `Bearer ${process.env.QSTASH_TOKEN}` };
 
   if (req.method === "DELETE") {
-    const id = String(body.messageId || "");
-    if (/^[\w:-]{1,200}$/.test(id)) await fetch(`${qstashUrl()}/v2/messages/${encodeURIComponent(id)}`, { method: "DELETE", headers: auth }).catch(() => {});
+    await cancel(String(body.messageId || ""));
     return res.status(200).json({ ok: true });
   }
 
@@ -24,18 +21,13 @@ export default async function handler(req, res) {
   const sql = await db();
   const [sub] = await sql`SELECT endpoint FROM push_subs WHERE endpoint = ${String(body.endpoint || "")}`;
   if (!sub) return res.status(200).json({ scheduled: false });
-
-  const destination = `https://${req.headers["x-forwarded-host"] || req.headers.host}/api/rep-alert-fire`;
-  const message = JSON.stringify({ endpoint: sub.endpoint, title: String(body.title || "Time's up").slice(0, 80), body: String(body.body || "").slice(0, 200) });
-  const r = await fetch(`${qstashUrl()}/v2/publish/${destination}`, {
-    method: "POST",
-    headers: { ...auth, "Content-Type": "application/json", "Upstash-Not-Before": String(Math.max(Math.floor(Date.now() / 1000), Math.floor((endsAt - LEAD_MS) / 1000))), "Upstash-Retries": "1" },
-    body: message,
-  });
-  if (!r.ok) {
-    console.error("qstash publish failed", r.status, await r.text().catch(() => ""));
-    return res.status(200).json({ scheduled: false });
+  try {
+    const messageId = await publish(`${siteOrigin(req)}/api/rep-alert-fire`,
+      { endpoint: sub.endpoint, title: String(body.title || "Time's up").slice(0, 80), body: String(body.body || "").slice(0, 200) },
+      { at: endsAt - LEAD_MS });
+    res.status(200).json({ scheduled: true, messageId });
+  } catch (err) {
+    console.error(err.message);
+    res.status(200).json({ scheduled: false });
   }
-  const { messageId } = await r.json();
-  res.status(200).json({ scheduled: true, messageId });
 }
