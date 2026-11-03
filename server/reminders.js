@@ -82,7 +82,7 @@ export async function schedulePhone(sql, s, config, origin, now = Date.now()) {
   const prefs = s.prefs || {};
   const tz = tzOf(prefs, config);
   const prev = s.scheduled || {};
-  const next = {};
+  const next = prev.lastSent ? { lastSent: prev.lastSent } : {};
   const id = crypto.createHash("sha256").update(s.endpoint).digest("hex").slice(0, 16);
   for (const kind of KINDS) {
     if (prev[kind] && prev[kind].at > now) await cancel(prev[kind].id);
@@ -114,7 +114,7 @@ export async function cronDaily(req, res) {
   for (const s of subs) {
     try {
       const next = await schedulePhone(sql, s, all.config, siteOrigin(req));
-      report.push(`${s.name}: ${Object.values(next).map(x => x.local).join(", ") || "nothing on"}`);
+      report.push(`${s.name}: ${KINDS.filter(k => next[k]).map(k => next[k].local).join(", ") || "nothing on"}`);
     } catch (err) {
       report.push(`${s.name}: booking failed (${err.message})`);
     }
@@ -151,5 +151,9 @@ export async function reminderFire(req, res) {
   if (!all.config) return logged(res, kind, 200, { skipped: "no plan set up yet" });
   const messages = messagesFor(kind, all, s.prefs || {});
   if (!messages.length) return logged(res, kind, 200, { skipped: `${s.name}: nothing to remind about` });
-  logged(res, kind, 200, { report: await sendTo(sql, s, messages) });
+  const report = await sendTo(sql, s, messages);
+  if (report.some(line => line.endsWith(" sent"))) {
+    await sql`UPDATE push_subs SET scheduled = scheduled || ${JSON.stringify({ lastSent: { kind, at: Date.now() } })}::jsonb WHERE endpoint = ${s.endpoint}`;
+  }
+  logged(res, kind, 200, { report });
 }

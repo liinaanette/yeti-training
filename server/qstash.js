@@ -7,8 +7,9 @@ export const qstashReady = () => !!process.env.QSTASH_TOKEN;
 const base = () => (process.env.QSTASH_URL || "https://qstash.upstash.io").replace(/\/$/, "");
 const auth = () => ({ Authorization: `Bearer ${process.env.QSTASH_TOKEN}` });
 
-// This deployment's public address, for QStash to call back.
-export const siteOrigin = req => `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
+// The app's main public address, for QStash to call back. Vercel sets VERCEL_PROJECT_PRODUCTION_URL;
+// using it (rather than the host a request came in on) avoids per-deployment addresses that may be protected.
+export const siteOrigin = req => `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || req.headers["x-forwarded-host"] || req.headers.host}`;
 
 // Schedules a POST of `body` (JSON) to `url` at `at` (ms). Returns the QStash message id.
 export async function publish(url, body, { at, dedupeId } = {}) {

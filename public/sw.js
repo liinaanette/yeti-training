@@ -23,3 +23,18 @@ self.addEventListener("notificationclick", event => {
     return self.clients.openWindow(url);
   })());
 });
+
+// The phone can replace its push subscription (or let it expire). Register the new one straight
+// away, keeping this phone's reminder settings, so reminders don't silently stop.
+self.addEventListener("pushsubscriptionchange", event => {
+  event.waitUntil((async () => {
+    const old = event.oldSubscription;
+    const key = old && old.options && old.options.applicationServerKey;
+    const sub = event.newSubscription || (key ? await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }) : null);
+    if (!sub) return;
+    await fetch("/api/push", {
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: sub.toJSON(), oldEndpoint: old ? old.endpoint : undefined, refresh: true }),
+    });
+  })());
+});

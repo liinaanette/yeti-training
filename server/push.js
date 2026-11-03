@@ -5,7 +5,10 @@ import { DEFAULT_TIMES, cancelPhone, schedulePhone } from "./reminders.js";
 import { isClockTime, isTimeZone } from "./time.js";
 
 // GET: public key (and this phone's settings when ?endpoint= is given)
-// POST: save this phone's subscription and settings, or { test: true, endpoint } to send a test
+// POST: save this phone's subscription and settings, or { test: true, endpoint } to send a test.
+//   With refresh: true it keeps the phone's saved settings and only updates the subscription
+//   (sent when the app opens, and by the service worker when the phone replaces its subscription;
+//   oldEndpoint names the one being replaced).
 // DELETE: { endpoint } turns reminders off for this phone
 export default async function handler(req, res) {
   if (!allow(req, res, "GET", "POST", "DELETE") || !checkEnv(res)) return;
@@ -17,9 +20,9 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") {
     const endpoint = String(req.query.endpoint || "");
-    const [row] = endpoint ? await sql`SELECT prefs FROM push_subs WHERE endpoint = ${endpoint}` : [];
+    const [row] = endpoint ? await sql`SELECT prefs, scheduled FROM push_subs WHERE endpoint = ${endpoint}` : [];
     const prefs = row ? { morningTime: DEFAULT_TIMES.morning, eveningTime: DEFAULT_TIMES.evening, ...row.prefs } : null;
-    return res.status(200).json({ publicKey: process.env.VAPID_PUBLIC_KEY, subscribed: !!row, prefs, customTimes: qstashReady() });
+    return res.status(200).json({ publicKey: process.env.VAPID_PUBLIC_KEY, subscribed: !!row, prefs, scheduled: row ? row.scheduled : null, customTimes: qstashReady() });
   }
 
   if (req.method === "DELETE") {
@@ -40,7 +43,16 @@ export default async function handler(req, res) {
   if (!isPlainObject(sub) || typeof sub.endpoint !== "string" || !sub.endpoint.startsWith("https://")) {
     return res.status(400).json({ error: "Missing push subscription." });
   }
-  const given = body.prefs || {};
+  let given = body.prefs || {};
+  if (body.refresh) {
+    const oldEndpoint = typeof body.oldEndpoint === "string" ? body.oldEndpoint : sub.endpoint;
+    const [existing] = await sql`SELECT endpoint, prefs, scheduled FROM push_subs WHERE endpoint IN (${sub.endpoint}, ${oldEndpoint}) ORDER BY (endpoint = ${sub.endpoint}) DESC LIMIT 1`;
+    given = { ...(existing ? existing.prefs : {}), ...(isTimeZone(given.tz) ? { tz: given.tz } : {}) };
+    if (existing && existing.endpoint !== sub.endpoint) {
+      await cancelPhone(existing);
+      await sql`DELETE FROM push_subs WHERE endpoint = ${existing.endpoint}`;
+    }
+  }
   const on = key => given[key] !== false;
   const prefs = {
     morning: on("morning"), evening: on("evening"), weekly: on("weekly"),

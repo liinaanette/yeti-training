@@ -959,17 +959,29 @@ import * as P from "/plan.js";
   // ---------- reminders (web push) ----------
   const push = { supported: "serviceWorker" in navigator && "PushManager" in window && "Notification" in window, reg: null, sub: null, prefs: null, error: "", busy: false, ready: false };
   const keyBytes = b64 => { const s = atob((b64 + "=".repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+  // Remembered per phone when someone turns reminders off on purpose, so the app doesn't turn them back on.
+  const pushOptedOut = () => { try { return localStorage.getItem("yeti-push-off") === "1"; } catch (e) { return false; } };
+  const setPushOptedOut = v => { try { v ? localStorage.setItem("yeti-push-off", "1") : localStorage.removeItem("yeti-push-off"); } catch (e) {} };
+
+  // Every time the app opens, check this phone's reminders and repair them: phones sometimes drop or
+  // replace their push registration, and the server can't reach them until the app registers again.
   async function initPush() {
     if (!push.supported) { push.ready = true; return; }
     try {
       push.reg = await navigator.serviceWorker.register("/sw.js");
       push.sub = await push.reg.pushManager.getSubscription();
-      if (push.sub) {
+      if (Notification.permission === "granted" && !pushOptedOut()) {
+        if (!push.sub) {
+          const { publicKey } = await api("/api/push");
+          push.sub = await push.reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
+        }
+        const r = await api("/api/push", { method: "POST", body: JSON.stringify({ subscription: push.sub.toJSON(), refresh: true, prefs: { tz: phoneTz() } }) });
+        push.prefs = r.prefs; push.scheduled = r.scheduled; push.customTimes = !!r.customTimes;
+      } else if (push.sub) {
         const r = await api(`/api/push?endpoint=${encodeURIComponent(push.sub.endpoint)}`);
-        push.prefs = r.subscribed ? r.prefs : null;
-        push.customTimes = !!r.customTimes;
+        push.prefs = r.subscribed ? r.prefs : null; push.scheduled = r.scheduled; push.customTimes = !!r.customTimes;
       }
-    } catch (e) { push.error = e.message; }
+    } catch (e) { console.error(e); }
     push.ready = true;
     if (state.tab === "settings") render();
   }
@@ -980,13 +992,14 @@ import * as P from "/plan.js";
     push.busy = false; render();
   }
   const turnOnPush = () => pushAction(async () => {
+    setPushOptedOut(false);
     const perm = await Notification.requestPermission();
     if (perm !== "granted") throw new Error("Notifications are blocked for this app. Allow them in your phone's settings, then try again.");
     const { publicKey } = await api("/api/push");
     push.reg = push.reg || await navigator.serviceWorker.register("/sw.js");
     push.sub = (await push.reg.pushManager.getSubscription()) || await push.reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
     const r = await api("/api/push", { method: "POST", body: JSON.stringify({ subscription: push.sub.toJSON(), prefs: { morning: true, evening: true, weekly: true, tz: phoneTz() } }) });
-    push.prefs = r.prefs;
+    push.prefs = r.prefs; push.scheduled = r.scheduled; push.customTimes = !!r.customTimes;
     await api("/api/push", { method: "POST", body: JSON.stringify({ test: true, endpoint: push.sub.endpoint }) });
     toast("Reminders are on. A test notification is on its way.");
   });
@@ -994,7 +1007,7 @@ import * as P from "/plan.js";
   const savePushPrefs = prefs => pushAction(async () => {
     push.prefs = { ...push.prefs, ...prefs }; // show the new choice while it saves
     const r = await api("/api/push", { method: "POST", body: JSON.stringify({ subscription: push.sub.toJSON(), prefs: { ...prefs, tz: phoneTz() } }) });
-    push.prefs = r.prefs;
+    push.prefs = r.prefs; push.scheduled = r.scheduled;
     push.customTimes = !!r.customTimes;
   });
   const testPush = () => pushAction(async () => {
@@ -1004,9 +1017,24 @@ import * as P from "/plan.js";
   const turnOffPush = () => pushAction(async () => {
     await api("/api/push", { method: "DELETE", body: JSON.stringify({ endpoint: push.sub.endpoint }) });
     await push.sub.unsubscribe().catch(() => {});
-    push.sub = null; push.prefs = null;
+    push.sub = null; push.prefs = null; push.scheduled = null;
+    setPushOptedOut(true);
     toast("Reminders are off on this phone.");
   });
+
+  function reminderStatus() {
+    const sc = push.scheduled || {};
+    const when = ms => {
+      const d = new Date(ms), day = dateStr(d) === todayStr() ? "today" : dateStr(d) === dateStr(new Date(Date.now() + 864e5)) ? "tomorrow" : d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+      return `${day} ${timeOf(ms)}`;
+    };
+    const next = ["morning", "evening"].filter(k => sc[k] && sc[k].at > Date.now()).sort((a, b) => sc[a].at - sc[b].at);
+    const lines = [];
+    if (next.length) lines.push(`Next: ${next.map(k => `${k} ${when(sc[k].at)}`).join(", ")}.`);
+    else if (push.customTimes) lines.push("Next reminders are booked tonight.");
+    if (sc.lastSent) lines.push(`Last sent: ${sc.lastSent.kind} ${when(sc.lastSent.at)}.`);
+    return lines.length ? `<p class="small muted">${esc(lines.join(" "))}</p>` : "";
+  }
 
   function remindersCard() {
     const iosNotInstalled = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.matchMedia("(display-mode: standalone)").matches;
@@ -1022,13 +1050,14 @@ import * as P from "/plan.js";
         <div class="remind-row"><label class="check"><input type="checkbox" id="push-morning" ${push.prefs.morning ? "checked" : ""} ${push.busy ? "disabled" : ""}> Morning: today's plan</label>${push.customTimes ? `<input type="time" id="push-morning-time" value="${esc(push.prefs.morningTime || "08:30")}" aria-label="Morning reminder time" ${push.busy || !push.prefs.morning ? "disabled" : ""}>` : ""}</div>
         <div class="remind-row"><label class="check"><input type="checkbox" id="push-evening" ${push.prefs.evening ? "checked" : ""} ${push.busy ? "disabled" : ""}> Evening: nudge if nobody has trained yet</label>${push.customTimes ? `<input type="time" id="push-evening-time" value="${esc(push.prefs.eveningTime || "19:00")}" aria-label="Evening reminder time" ${push.busy || (!push.prefs.evening && push.prefs.weekly === false) ? "disabled" : ""}>` : ""}</div>
         <label class="check"><input type="checkbox" id="push-weekly" ${push.prefs.weekly !== false ? "checked" : ""} ${push.busy ? "disabled" : ""}> Sunday evening: summary of the week</label>
+        ${reminderStatus()}
         <p class="small muted">During reps you'll also get a "time's up" alert, even if the phone is locked.</p>
         <div class="row"><button class="btn sm quiet" data-act="push-test" ${push.busy ? "disabled" : ""}>Send a test</button><button class="btn sm ghost" data-act="push-off" ${push.busy ? "disabled" : ""}>Turn off on this phone</button></div>`;
     } else {
       inner = `<button class="btn" data-act="push-on" ${push.busy ? "disabled" : ""}>Turn on reminders on this phone</button>`;
     }
     return `<div class="card">
-      <div><h2>Reminders</h2><p class="small muted">Each of you turns this on on your own phone${push.customTimes ? " and picks your own times" : ""}.${push.sub && push.prefs && !push.customTimes ? " The evening nudge comes around 6–7. Morning reminders and your own times need QStash (see the README)." : ""}</p></div>
+      <div><h2>Reminders</h2><p class="small muted">Each of you turns this on on your own phone${push.customTimes ? " and picks your own times. They keep coming every day without you doing anything" : ""}.${push.sub && push.prefs && !push.customTimes ? " The evening nudge comes around 6–7. Morning reminders and your own times need QStash (see the README)." : ""}</p></div>
       ${inner}
       ${push.error ? `<p class="small" style="color:var(--upset)">${esc(push.error)}</p>` : ""}
     </div>`;
