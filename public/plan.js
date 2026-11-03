@@ -4,7 +4,7 @@
 // Stage 1 keeps the person inside the flat behind a baby gate; stage 2 is the real front door.
 export const STAGES = {
   gate: {
-    label: "Behind the gate", defaultStart: 60, goal: 600,
+    label: "Behind the gate", defaultStart: 60,
     desc: "Dog stays behind the baby gate, you go out of sight inside the flat.",
     cues: ["Pick up keys", "Open and close the first front door (stay inside)", "Put on shoes", "Rattle the door handle", "Put on jacket", "Close the gate and step straight back", "Grab your bag"],
   },
@@ -170,4 +170,50 @@ export function weeklyText(config, w) {
     ? (w.levelTo > w.levelFrom ? ` Longest rep went up from ${fmt(w.levelFrom)} to ${fmt(w.levelTo)}.` : w.levelTo < w.levelFrom ? ` Longest rep is ${fmt(w.levelTo)}, down from ${fmt(w.levelFrom)}. That's normal, progress isn't a straight line.` : ` Longest rep held at ${fmt(w.levelTo)}.`)
     : "";
   return { title: `${dog}'s week`, body: `${w.sessions} session${w.sessions === 1 ? "" : "s"}, ${w.reps} reps, ${w.calmPct}% calm.${level}` };
+}
+
+// ---------- the step-by-step guide ----------
+// Four steps, each with checks that say when the dog is ready for the next one.
+// Text for each step lives in the Guide view (index.html); the rules for the checks live here.
+export const GUIDE = [
+  { id: "gate", mode: "gate", setups: ["gate"], checks: [{ id: "calm", target: 1200 }, { id: "streak" }, { id: "cues", manual: true }] },
+  { id: "door", mode: "door", setups: ["gate"], checks: [{ id: "calm", target: 1800 }, { id: "streak" }, { id: "returns", manual: true }] },
+  { id: "open", mode: "door", setups: ["gate-open", "free"], checks: [{ id: "calm", target: 1800 }, { id: "streak" }] },
+  { id: "longer", mode: "door", setups: ["gate-open", "free"], checks: [{ id: "calm", target: 7200 }] },
+];
+const STREAK = 3;
+
+// Which step the owners are on: chosen in the Guide, or worked out from the stage and setup.
+export function guideStep(config) {
+  if (config && Number.isInteger(config.guideStep)) return Math.max(0, Math.min(GUIDE.length - 1, config.guideStep));
+  if (curMode(config) === "gate") return 0;
+  return ["gate-open", "free"].includes(config && config.lastSetup) ? 2 : 1;
+}
+
+const repSetup = (r, s) => r.setup || s.setup || "gate";
+
+// Best calm rep and the run of calm sessions within one step (its stage and setups).
+export function guideStats(sessions, step) {
+  const g = GUIDE[step];
+  const inStep = [...sessions.values()]
+    .filter(s => sessionMode(s) === g.mode && doneReps(s).some(r => g.setups.includes(repSetup(r, s))))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  let best = 0;
+  for (const s of inStep) for (const r of doneReps(s)) if (r.result === "calm" && g.setups.includes(repSetup(r, s))) best = Math.max(best, r.actual || r.target);
+  let calmInRow = 0;
+  for (let k = inStep.length - 1; k >= 0 && doneReps(inStep[k]).every(r => r.result === "calm"); k--) calmInRow++;
+  return { best, calmInRow, sessions: inStep.length };
+}
+
+// The current step's checklist: automatic checks from the sessions, manual ones from config.guideChecks.
+export function guideProgress(config, sessions) {
+  const step = guideStep(config);
+  const st = guideStats(sessions, step);
+  const manual = (config && config.guideChecks) || {};
+  const checks = GUIDE[step].checks.map(c => {
+    if (c.manual) return { ...c, done: !!manual[`${GUIDE[step].id}:${c.id}`] };
+    if (c.id === "calm") return { ...c, done: st.best >= c.target, best: st.best };
+    return { ...c, done: st.calmInRow >= STREAK, inRow: Math.min(st.calmInRow, STREAK), of: STREAK };
+  });
+  return { step, checks, stats: st, ready: checks.every(c => c.done), last: step === GUIDE.length - 1 };
 }

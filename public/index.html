@@ -195,7 +195,7 @@ label.field span.muted { font-weight: 400; }
   padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px));
 }
-.tabs nav { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); }
+.tabs nav { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
 .tabs button { background: none; border: 0; padding: 8px 4px 10px; font-weight: 700; font-size: 0.78rem; color: var(--muted); display: grid; justify-items: center; gap: 3px; }
 .tabs button svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .tabs button[aria-current="page"] { color: var(--accent); }
@@ -239,6 +239,24 @@ label.field span.muted { font-weight: 400; }
 .download { color: var(--accent); font-weight: 700; text-decoration: none; }
 .remind-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .remind-row input[type="time"] { width: auto; min-width: 7.5rem; }
+.steps { display: grid; gap: 10px; }
+.step { background: var(--surface); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 10px; box-shadow: var(--shadow); }
+.step-head { display: flex; gap: 12px; align-items: center; }
+.step-num { width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; background: var(--surface-2); color: var(--muted); border: 2px solid var(--line); }
+.step.done .step-num { background: var(--calm); border-color: var(--calm); color: var(--surface); }
+.step.current { outline: 2px solid var(--accent); }
+.step.current .step-num { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.step-head h2 { font-size: 1.05rem; }
+.checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.checklist li { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: start; }
+.tick { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--line); display: grid; place-items: center; font-size: 0.8rem; font-weight: 800; color: var(--surface); }
+.tick.on { background: var(--calm); border-color: var(--calm); }
+.checklist input { width: 22px; height: 22px; accent-color: var(--calm); margin: 0; }
+.meter { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-top: 4px; max-width: 220px; }
+.meter i { display: block; height: 100%; background: var(--tan); }
+.guide-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.guide-table td { border-top: 1px solid var(--line); padding: 8px 8px 8px 0; vertical-align: top; }
+.guide-table td:first-child { font-weight: 700; white-space: nowrap; }
 .periods { display: flex; flex-wrap: wrap; gap: 6px; }
 .periods button { border: 1.5px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: 0.88rem; }
 .periods button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
@@ -275,6 +293,7 @@ details[open] summary { margin-bottom: 8px; }
   <nav aria-label="Sections">
     <button data-tab="today" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Today</button>
     <button data-tab="history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15l4-5 3 3 5-7"/></svg>History</button>
+    <button data-tab="guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>Guide</button>
     <button data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Settings</button>
   </nav>
 </div>
@@ -481,7 +500,7 @@ import * as P from "/plan.js";
     document.getElementById("tabs").hidden = !state.config;
     document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === (state.tab === "report" ? "history" : state.tab) ? "page" : "false"));
     if (!state.config) { appEl.innerHTML = setupView(); return bindSetup(); }
-    const view = state.tab === "report" ? reportView() : state.tab === "history" ? historyView() : state.tab === "settings" ? settingsView() : todayView();
+    const view = state.tab === "guide" ? guideView() : state.tab === "report" ? reportView() : state.tab === "history" ? historyView() : state.tab === "settings" ? settingsView() : todayView();
     appEl.innerHTML = (state.offline ? `<div class="notice">Can't reach the server right now. Changes may not save until you're back online.</div>` : "") + view;
   }
 
@@ -569,13 +588,14 @@ import * as P from "/plan.js";
     const maxTarget = Math.max(...plan);
     const topIdx = plan.indexOf(maxTarget);
 
+    const guide = P.guideProgress(state.config, state.sessions);
     let banner = "";
     if (rest) {
       banner = `<div class="banner rest"><h2>Rest day suggested</h2><p class="small">${esc(dog())} has trained ${(state.config.perWeek || 5)} days in the last week. A day off helps the progress stick. Keep any time alone today shorter than ${fmt(w)}.</p><div class="row"><button class="btn sm ghost" data-act="train-anyway">Train anyway</button></div></div>`;
     } else if (upset && !allDone && !state.ignoreUpset) {
       banner = `<div class="banner upset"><h2>Stop here for today</h2><p class="small">${esc(dog())} got upset. End with something fun: a walk, a sniff game, a chew. Tomorrow's plan steps back automatically.</p><div class="row"><button class="btn sm quiet" data-act="end-session">End today's session</button><button class="btn sm ghost" data-act="ignore-upset">Keep going</button></div></div>`;
-    } else if (mode === "gate" && w >= STAGES.gate.goal && !(s && doneReps(s).length)) {
-      banner = `<div class="banner calm"><h2>Ready for the front door?</h2><p class="small">${esc(dog())} is up to ${fmt(w)} behind the gate. You can keep going here or move on to real departures. The door stage starts shorter, because leaving through the front door is a bigger deal.</p><div class="row"><button class="btn sm ghost" data-act="goto-settings">Change stage</button></div></div>`;
+    } else if (guide.ready && !guide.last && !(s && doneReps(s).length)) {
+      banner = `<div class="banner calm"><h2>Ready for the next step</h2><p class="small">${esc(dog())} has ticked off everything for "${esc(GUIDE_TEXT[guide.step].title)}". Have a look at the next step in the Guide.</p><div class="row"><button class="btn sm ghost" data-act="goto-guide">Open the Guide</button></div></div>`;
     } else if (!state.config.mode && !s) {
       banner = `<div class="banner rest"><h2>New: start behind a baby gate</h2><p class="small">If going out the front door is slow or noisy, start with ${esc(dog())} behind a gate while you go out of sight inside. Move to the door later.</p><div class="row"><button class="btn sm ghost" data-act="goto-settings">Choose a stage</button></div></div>`;
     } else if (allDone && s) {
@@ -680,6 +700,139 @@ import * as P from "/plan.js";
       ${signs.length ? `<div class="eyebrow">Signs you've seen</div><div class="dots">${signs.map(([t, n, res]) => `<span class="dot ${res}">${esc(t)} ×${n}</span>`).join("")}</div>` : ""}
       ${reps.length < 20 ? `<p class="small muted">Only ${reps.length} reps so far. Give it a couple of weeks before reading much into this.</p>` : ""}
     </div>`;
+  }
+
+  // ---------- the step-by-step guide ----------
+  // Copy for each step; the checks behind "ready to move on" are in plan.js (GUIDE, guideProgress).
+  const GUIDE_TEXT = [
+    {
+      title: "Behind the gate",
+      summary: d => `${d} stays behind the gate while you go out of sight inside the flat.`,
+      todo: d => [
+        `One session a day in the app, about 5 days a week. The reps can be long here, because ${d} is relaxed behind the gate.`,
+        `Make the gate part of normal life: several times a day put ${d} behind it while you cook, shower or work in another room, from 2 minutes to an hour. Bed, water, sometimes a chew.`,
+        `Practise the departure cues (keys, shoes, opening and closing the first door) until they get no reaction.`,
+      ],
+      checks: { calm: "Calm for 20 minutes behind the gate, with you out of sight", streak: "3 calm sessions in a row", cues: d => `Departure cues get no reaction: ${d} stays lying down` },
+      next: d => `Start the front door, with ${d} still behind the gate. The door level starts again at 5 seconds.`,
+    },
+    {
+      title: "Front door, behind the gate",
+      summary: d => `You leave through both front doors; ${d} stays behind the gate.`,
+      todo: d => [
+        `Short reps again: the door stage starts at a few seconds and grows a little each session. Seconds turn into minutes over a few weeks.`,
+        `Each rep: go out through both doors, tap "I'm out" once they're shut, come back calmly when it ends. 1–2 minutes of calm between reps.`,
+        `Stop a rep at the first sign of stress. Don't wait for barking.`,
+      ],
+      checks: { calm: "Calm for 30 minutes with you out of the flat", streak: "3 calm sessions in a row", returns: d => `Calm when you come back: no frantic greeting` },
+      next: () => "Open the gate. This is harder, so the door level is halved to start with.",
+    },
+    {
+      title: "Gate open or free in the flat",
+      summary: d => `The way ${d} will really be left: gate open, or free in the flat.`,
+      todo: d => [
+        `Start with the gate open but still in the doorway, then take it away or let ${d} have the run of the flat.`,
+        `Expect the level to dip at first. That's normal, and it comes back quickly.`,
+        `Pick "Gate open" or "Free in the flat" as the setup on Today, so History can compare.`,
+      ],
+      checks: { calm: "Calm for 30 minutes, gate open or free", streak: "3 calm sessions in a row" },
+      next: () => "Move on to building longer absences.",
+    },
+    {
+      title: "Longer absences",
+      summary: d => `Building up to real-life absences: an hour, then several.`,
+      todo: d => [
+        `Keep one session a day, now with longer reps. Above an hour the steps are smaller.`,
+        `Start replacing sitters and daycare with real absences, but only ones shorter than ${d}'s level.`,
+        `Keep logging real absences with "Log time alone", so the plan and your behaviourist can see how they go.`,
+      ],
+      checks: { calm: "Calm for 2 hours" },
+      next: () => "",
+    },
+  ];
+
+  function guideView() {
+    const g = P.guideProgress(state.config, state.sessions);
+    const d = esc(dog());
+    const stepCard = (t, i) => {
+      const cls = i < g.step ? "done" : i === g.step ? "current" : "";
+      const head = `<div class="step-head"><span class="step-num">${i < g.step ? "✓" : i + 1}</span><div><h2>${esc(t.title)}</h2><p class="small muted">${t.summary(d)}</p></div></div>`;
+      if (i !== g.step) {
+        return `<div class="step ${cls}">${head}${i > g.step ? `<button class="hint-toggle" data-act="guide-set" data-step="${i}" style="justify-self:start">I'm already on this step</button>` : ""}</div>`;
+      }
+      const items = g.checks.map(c => {
+        const label = typeof t.checks[c.id] === "function" ? t.checks[c.id](d) : t.checks[c.id];
+        if (c.manual) return `<li><input type="checkbox" id="guide-${c.id}" data-guide-check="${P.GUIDE[i].id}:${c.id}" ${c.done ? "checked" : ""}><label for="guide-${c.id}">${label}<br><span class="small muted">Tick this yourselves when it's true</span></label></li>`;
+        const detail = c.id === "calm"
+          ? `<span class="small muted">Best calm rep so far: ${c.best ? fmt(c.best) : "none yet"} of ${fmt(c.target)}</span><div class="meter"><i style="width:${Math.min(100, (c.best / c.target) * 100).toFixed(0)}%"></i></div>`
+          : `<span class="small muted">${c.inRow} of ${c.of} so far</span>`;
+        return `<li><span class="tick ${c.done ? "on" : ""}" aria-label="${c.done ? "Done" : "Not yet"}">${c.done ? "✓" : ""}</span><div>${label}<br>${detail}</div></li>`;
+      }).join("");
+      return `<div class="step current">${head}
+        <div class="prose small"><ul>${t.todo(d).map(x => `<li>${x}</li>`).join("")}</ul></div>
+        ${g.checks.length ? `<div style="display:grid;gap:8px"><span class="eyebrow">${g.last ? "Milestone" : "Ready to move on when"}</span><ul class="checklist">${items}</ul></div>` : ""}
+        ${!g.last ? `<div style="display:grid;gap:6px">
+          ${g.ready ? `<p class="small">All done. ${t.next(d)}</p>` : `<p class="small muted">Next step: ${t.next(d)}</p>`}
+          <div class="row"><button class="btn ${g.ready ? "" : "ghost"} sm" data-act="guide-next">${g.ready ? "Move to the next step" : "Move on anyway"}</button></div>
+        </div>` : ""}
+      </div>`;
+    };
+    return `
+      <div class="top"><div><p class="eyebrow">Guide</p><h1>Step by step</h1><p class="small muted">The usual under-threshold method, with numbers. Your behaviourist knows ${d} best: where their advice differs, follow them.</p></div></div>
+      <div class="steps">${GUIDE_TEXT.map(stepCard).join("")}</div>
+      <div class="card"><details><summary>Every session, step by step</summary>
+        <table class="guide-table"><tbody>
+          <tr><td>1. Before</td><td>Walk or sniff, toilet, then 10–15 minutes of calm at home.</td></tr>
+          <tr><td>2. Cues</td><td>Do the two departure cues from Today 5 times each, without leaving.</td></tr>
+          <tr><td>3. Reps</td><td>Follow the plan on Today. Watch ${d} on a camera if you can.</td></tr>
+          <tr><td>4. Coming back</td><td>Calm and quiet. Let ${d} come to you.</td></tr>
+          <tr><td>5. After</td><td>Something normal: a sniff walk, play, or just carry on with your day.</td></tr>
+        </tbody></table>
+        <p class="small muted">One session a day, about 5 days a week, 20–30 minutes at most.</p>
+      </details></div>
+      <div class="card"><details><summary>When to train</summary><div class="prose small"><ul>
+        <li>When ${d} is awake and relaxed, about 15–30 minutes after a walk, toilet done.</li>
+        <li>Don't wait for ${d} to fall asleep and then slip out. Waking up to find you gone teaches ${d} to keep watch. ${d} should see you go.</li>
+        <li>Falling asleep during a rep is great: that's relaxing while you're away.</li>
+        <li>Sleeping behind the gate at night: only if that's how you'll leave ${d} in real life and ${d} is relaxed there.</li>
+      </ul></div></details></div>
+      <div class="card"><details><summary>Stop a rep at the first sign of stress</summary><div class="prose small">
+        <p>Come back in calmly as soon as you see any of these, and log the rep as mild stress:</p>
+        <ul><li>Whining, even once or twice</li><li>Pacing, or waiting at the gate or door</li><li>Staring at the door or listening hard</li><li>Yawning or lip-licking</li><li>Dropping the chew or toy</li></ul>
+        <p>Barking, howling, scratching or heavy panting mean upset: stop for the day.</p>
+      </div></details></div>
+      <div class="card"><details><summary>The two rules that matter most</summary><div class="prose small"><ul>
+        <li><b>Outside training, don't leave ${d} alone longer than the current level.</b> Use a sitter, daycare, friends, or take ${d} along. One long panicky absence can undo weeks of work. If it happens, log it with "Log time alone".</li>
+        <li><b>Go slow, even on great days.</b> Steady progress beats big jumps.</li>
+      </ul></div></details></div>
+      <div class="card"><details><summary>About chews</summary><div class="prose small">
+        <p>A chew at the start of a session is fine. But if ${d} is only calm while chewing, ${d} isn't really relaxed yet. Now and then do the last rep without one, and use the "Busy with a chew" tag so you can see the difference.</p>
+      </div></details></div>`;
+  }
+
+  // Moving to the next step also sets up the app for it.
+  function guideNext() {
+    const g = P.guideProgress(state.config, state.sessions);
+    const step = g.step + 1;
+    if (step >= P.GUIDE.length) return;
+    if (step === 1) {
+      saveConfig({ lastSetup: "gate", guideStep: 1 });
+      setStage("door", 5);
+      const s = state.sessions.get(todayStr());
+      if (s && !doneReps(s).length) saveSession(todayStr(), { setup: "gate" });
+      toast(`Next step: front door, with ${dog()} behind the gate. Starting at 5 seconds.`);
+    } else if (step === 2) {
+      const w = computeWorking("door").w;
+      saveConfig({ lastSetup: "gate-open", guideStep: 2 });
+      setStage("door", roundDur(Math.max(3, w * 0.5)));
+      const s = state.sessions.get(todayStr());
+      if (s && !doneReps(s).length) saveSession(todayStr(), { setup: "gate-open" });
+      toast(`Next step: gate open. The level starts at ${fmt(roundDur(Math.max(3, w * 0.5)))}.`);
+    } else {
+      saveConfig({ guideStep: step });
+      toast("Next step: longer absences.");
+    }
+    window.scrollTo(0, 0);
   }
 
   // ---------- report for the behaviourist ----------
@@ -1372,6 +1525,9 @@ import * as P from "/plan.js";
     else if (act === "push-off") turnOffPush();
     else if (act === "push-test") testPush();
     else if (act === "goto-settings") { state.tab = "settings"; render(); window.scrollTo(0, 0); }
+    else if (act === "goto-guide") { state.tab = "guide"; render(); window.scrollTo(0, 0); }
+    else if (act === "guide-next") guideNext();
+    else if (act === "guide-set") { saveConfig({ guideStep: +b.dataset.step }); toast("Step changed. Check the stage, setup and level in Settings match it."); }
     else if (act === "pick-stage") { state.stagePick = b.dataset.mode; render(); }
     else if (act === "switch-stage") {
       const mode = state.stagePick || curMode();
@@ -1412,6 +1568,10 @@ import * as P from "/plan.js";
   });
 
   appEl.addEventListener("change", e => {
+    if (e.target.dataset.guideCheck) {
+      saveConfig({ guideChecks: { ...(state.config.guideChecks || {}), [e.target.dataset.guideCheck]: e.target.checked } });
+      return;
+    }
     if (e.target.id === "rp-from" || e.target.id === "rp-to") {
       state.report = { ...state.report, period: "custom", from: document.getElementById("rp-from").value, to: document.getElementById("rp-to").value };
       render(); return;

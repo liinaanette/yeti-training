@@ -34,6 +34,7 @@ Each session has a "longest rep" (working level) and an up-and-down plan of shor
 - Breaks: 4–6 days ×0.85, 7–13 ×0.7, 14+ ×0.5. An upset real absence since the last session ×0.75.
 - Each stage (`gate`, `door`) has its own level and history. A manual level reset (`bases[mode]`) after the last session wins.
 - Rest day suggested after `perWeek` sessions in the previous 6 days.
+- Guide (Guide tab): four steps (`GUIDE` in plan.js: gate → door behind the gate → gate open/free → longer absences). `guideProgress()` checks the current step from sessions (best calm rep in the step's stage + setups, 3 calm sessions in a row) plus manual ticks in `config.guideChecks`; `config.guideStep` holds the step once chosen. Step copy lives in `GUIDE_TEXT` in index.html; moving on sets stage/setup/level (`guideNext`).
 
 If you change a rule, update `test/plan.test.js`, the "How the plan works" text in Settings, and the method note in the report.
 

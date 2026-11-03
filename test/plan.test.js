@@ -1,7 +1,7 @@
 // Run with: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildPlan, computeWorking, nextAfter, restSuggested, todaySummary, weeklySummary, weeklyText } from "../public/plan.js";
+import { buildPlan, computeWorking, guideProgress, guideStep, nextAfter, restSuggested, todaySummary, weeklySummary, weeklyText } from "../public/plan.js";
 
 const config = { dogName: "Yeti", mode: "gate", bases: { gate: { seconds: 120, setOn: "2026-10-01", setAt: 1 } }, perWeek: 5, capMin: 30 };
 const rep = (i, target, result, actual = target) => ({ i, target, actual, result });
@@ -104,4 +104,31 @@ test("weekly summary counts the last 7 days", () => {
   assert.equal(w.levelFrom, 90);
   assert.equal(w.levelTo, 120);
   assert.match(weeklyText(config, w).body, /went up from 1m 30s to 2m/);
+});
+
+test("guide step follows the stage and setup unless chosen", () => {
+  assert.equal(guideStep({ mode: "gate" }), 0);
+  assert.equal(guideStep({ mode: "door", lastSetup: "gate" }), 1);
+  assert.equal(guideStep({ mode: "door", lastSetup: "free" }), 2);
+  assert.equal(guideStep({ mode: "door", lastSetup: "free", guideStep: 3 }), 3);
+});
+
+test("gate step is ready after 20 calm minutes, 3 calm sessions in a row and cues ignored", () => {
+  const gate = (date, res, actual) => ({ ...session(date, 600, [rep(0, 600, res, actual)]), setup: "gate" });
+  let sessions = map([gate("2026-10-20", "calm", 540), gate("2026-10-21", "mild", 600), gate("2026-10-22", "calm", 600), gate("2026-10-23", "calm", 1300)]);
+  let g = guideProgress(config, sessions);
+  assert.equal(g.step, 0);
+  assert.deepEqual(g.checks.map(c => c.done), [true, false, false]);   // 21m 40s best, only 2 calm in a row, cues not ticked
+  assert.equal(g.checks[1].inRow, 2);
+  sessions = map([...sessions.values(), gate("2026-10-24", "calm", 600)]);
+  g = guideProgress({ ...config, guideChecks: { "gate:cues": true } }, sessions);
+  assert.equal(g.ready, true);
+});
+
+test("door step only counts door reps with the dog behind the gate", () => {
+  const door = (date, setup, actual) => ({ ...session(date, 1800, [rep(0, 1800, "calm", actual)], "door"), setup });
+  const g = guideProgress({ ...config, mode: "door", lastSetup: "gate" }, map([door("2026-10-20", "free", 2000), door("2026-10-21", "gate", 900)]));
+  assert.equal(g.step, 1);
+  assert.equal(g.checks[0].best, 900);
+  assert.equal(g.stats.sessions, 1);
 });
