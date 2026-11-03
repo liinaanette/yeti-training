@@ -20,6 +20,14 @@ const PATTERNS = [
   [0.15, 0.5, 0.25, 0.7, 0.35, 0.9, 1, 0.2],
   [0.1, 0.4, 0.7, 0.3, 1, 0.5, 0.85, 0.15],
 ];
+// Behind the gate the dog is far from his stress point, so a few long reps instead of many short ones.
+const GATE_PATTERNS = [
+  [0.5, 1, 0.35],
+  [0.3, 0.75, 1],
+  [0.6, 0.3, 1, 0.4],
+];
+// Bumped when the shape of plans changes, so an untouched plan for today can be rebuilt.
+export const PLAN_VERSION = 2;
 export const REST_BETWEEN = 90;
 
 // ---------- dates and durations ----------
@@ -98,11 +106,12 @@ export function computeWorking(config, sessions, today, mode = curMode(config), 
 
 const shortDay = date => new Date(date + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
 
-export function buildPlan(config, w, date) {
+export function buildPlan(config, w, date, mode = curMode(config)) {
   const cap = ((config && config.capMin) || 30) * 60;
-  const p = PATTERNS[((dayNum(date) % 3) + 3) % 3].slice();
+  const patterns = mode === "gate" ? GATE_PATTERNS : PATTERNS;
+  const p = patterns[((dayNum(date) % patterns.length) + patterns.length) % patterns.length].slice();
   const total = arr => arr.reduce((a, f) => a + f * w, 0) + REST_BETWEEN * (arr.length - 1);
-  while (total(p) > cap && p.length > 3) {
+  while (total(p) > cap && p.length > (mode === "gate" ? 2 : 3)) {
     let idx = -1, max = -1;
     p.forEach((f, i) => { if (f < 1 && i !== p.length - 1 && f > max) { max = f; idx = i; } });
     p.splice(idx, 1);
@@ -133,7 +142,7 @@ export function todaySummary(config, sessions, today, absences = []) {
   const s = sessions.get(today);
   const mode = s ? sessionMode(s) : curMode(config);
   const w = s ? s.working : computeWorking(config, sessions, today, mode, absences).w;
-  const plan = s ? s.plan : buildPlan(config, w, today);
+  const plan = s ? s.plan : buildPlan(config, w, today, mode);
   const minutes = Math.round((plan.reduce((a, b) => a + b, 0) + REST_BETWEEN * (plan.length - 1)) / 60);
   return {
     mode, w, plan, minutes,

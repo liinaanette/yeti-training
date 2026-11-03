@@ -343,7 +343,7 @@ import * as P from "/plan.js";
   const getBase = mode => P.getBase(state.config, mode);
   const nextAfter = s => P.nextAfter(s, dog());
   const computeWorking = (mode = curMode()) => P.computeWorking(state.config, state.sessions, todayStr(), mode, state.absences);
-  const buildPlan = (w, date) => planFor(state.config, w, date);
+  const buildPlan = (w, date, mode = curMode()) => planFor(state.config, w, date, mode);
   const restSuggested = () => P.restSuggested(state.config, state.sessions, todayStr());
   const weekCount = () => P.weekCount(state.sessions, todayStr());
   const bestCalmEver = mode => P.bestCalmEver(state.sessions, mode);
@@ -388,9 +388,17 @@ import * as P from "/plan.js";
       state.absences = data.absences || [];
       state.configLoaded = true;
       render();
+      refreshStalePlan();
     } catch (e) {
       if (!(e instanceof AuthError)) { state.offline = true; render(); }
     }
+  }
+
+  // Today's plan made before the plan shape changed (and not started yet) is rebuilt once.
+  function refreshStalePlan() {
+    const t = todayStr(), s = state.sessions.get(t);
+    if (!s || (s.planVersion || 1) >= P.PLAN_VERSION || (s.reps || []).some(r => r.result)) return;
+    saveSession(t, { plan: buildPlan(s.working, t, sessionMode(s)), planVersion: P.PLAN_VERSION });
   }
 
   function saveSession(date, patch, create = false) {
@@ -431,7 +439,7 @@ import * as P from "/plan.js";
     if (state.sessions.get(t)) return state.sessions.get(t);
     const mode = curMode();
     const { w, why } = computeWorking(mode);
-    const s = { date: t, mode, setup: lastSetup(), working: w, why, plan: buildPlan(w, t), cues: pickCues(t, mode), cuesDone: false, reps: [], notes: "", createdAt: Date.now() };
+    const s = { date: t, mode, setup: lastSetup(), working: w, why, plan: buildPlan(w, t, mode), planVersion: P.PLAN_VERSION, cues: pickCues(t, mode), cuesDone: false, reps: [], notes: "", createdAt: Date.now() };
     saveSession(t, s, true);
     return s;
   }
@@ -446,13 +454,13 @@ import * as P from "/plan.js";
     if (!s) return "now";
     if (!doneReps(s).length) {
       const { w, why } = computeWorking(mode);
-      saveSession(t, { mode, working: w, why, plan: buildPlan(w, t), cues: pickCues(t, mode), cuesDone: false });
+      saveSession(t, { mode, working: w, why, plan: buildPlan(w, t, mode), planVersion: P.PLAN_VERSION, cues: pickCues(t, mode), cuesDone: false });
       return "now";
     }
     // Reps already done today: keep those, and move the rest of today's reps to the new level.
     if (seconds && sessionMode(s) === mode) {
       const w = roundDur(seconds);
-      const fresh = buildPlan(w, t);
+      const fresh = buildPlan(w, t, mode);
       const done = new Set((s.reps || []).filter(r => r.result).map(r => r.i));
       const len = Math.max(fresh.length, Math.max(-1, ...done) + 1);
       const plan = Array.from({ length: len }, (_, i) => (done.has(i) ? s.plan[i] : fresh[Math.min(i, fresh.length - 1)]));
@@ -576,7 +584,7 @@ import * as P from "/plan.js";
     const mode = s ? sessionMode(s) : curMode();
     const computed = s ? null : computeWorking(mode);
     const w = s ? s.working : computed.w;
-    const plan = s ? s.plan : buildPlan(w, t);
+    const plan = s ? s.plan : buildPlan(w, t, mode);
     const cues = s ? s.cues : pickCues(t, mode);
     const reps = (s && s.reps) || [];
     const repFor = i => reps.find(r => r.i === i);
@@ -898,7 +906,7 @@ import * as P from "/plan.js";
         <table class="rp-table"><thead class="rp-block"><tr><th>Date</th><th>Time</th><th>How long</th><th>How it went</th><th>Note</th></tr></thead><tbody>
           ${absences.map(a => `<tr class="rp-block"><td>${esc(niceDate(a.date, { weekday: "short", day: "numeric", month: "short" }))}</td><td>${timeOf(a.start)}</td><td>${fmt(a.seconds)}</td><td>${ABS_LABEL[a.result]}${a.tags && a.tags.length ? `<br><span class="muted">${esc(a.tags.join(", "))}</span>` : ""}</td><td>${esc(a.note || "")}</td></tr>`).join("")}
         </tbody></table>` : ""}
-        <div class="rp-block small muted"><b style="color:var(--ink)">How the plan adjusts.</b> Each session has a longest rep, with shorter reps above and below it. All calm through the longest rep: next session about +15% (extra time added on a good day doesn't make the step bigger). Mild stress: −15%, or the same level if it only happened in extra time. Upset: stop for the day, next session at 60% of where it went wrong. Breaks of 4–6, 7–13 and 14+ days restart at 85%, 70% and 50%. An upset real absence makes the next session 25% easier.</div>
+        <div class="rp-block small muted"><b style="color:var(--ink)">How the plan adjusts.</b> Each session has a longest rep, with shorter reps above and below it (3–4 longer reps behind the gate, 6–8 short ones at the front door). All calm through the longest rep: next session about +15% (extra time added on a good day doesn't make the step bigger). Mild stress: −15%, or the same level if it only happened in extra time. Upset: stop for the day, next session at 60% of where it went wrong. Breaks of 4–6, 7–13 and 14+ days restart at 85%, 70% and 50%. An upset real absence makes the next session 25% easier.</div>
       </div>`;
   }
 
@@ -1094,6 +1102,7 @@ import * as P from "/plan.js";
             <p>The method is threshold training: ${esc(dog())} only practices alone time short enough to stay calm, and it grows in small steps.</p>
             <ul>
               <li>Each day has a <b>longest rep</b>. The other reps go up and down around it, so most reps are easier than the last one. That keeps the stress low.</li>
+              <li>Behind the gate there are 3–4 longer reps. At the front door there are 6–8 short ones, because that's where the small steps matter.</li>
               <li>All calm through the longest rep: next session goes up about 15% (or +5 seconds for short times). Staying out longer than planned on a good day counts as calm, but the next step stays small.</li>
               <li>Calm for the planned time but a bit stressed only in extra time you added: same level next session.</li>
               <li>Mild stress: next session steps back about 15%.</li>

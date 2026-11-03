@@ -78,6 +78,22 @@ test("plans go up and down, keep the longest rep, and fit the session cap", () =
   assert.ok(total <= 30 * 60 || plan.length === 3);
 });
 
+test("behind the gate: 3-4 longer reps that still go up and down", () => {
+  for (const date of ["2026-11-03", "2026-11-04", "2026-11-05"]) {
+    const plan = buildPlan(config, 420, date, "gate");
+    assert.ok(plan.length >= 3 && plan.length <= 4, `${date}: ${plan}`);
+    assert.ok(plan.includes(420));
+    assert.ok(Math.min(...plan) >= 420 * 0.25);
+  }
+  assert.ok(buildPlan(config, 420, "2026-11-03", "door").length >= 6);
+});
+
+test("long gate levels still fit the session cap", () => {
+  const plan = buildPlan(config, 1500, "2026-11-03", "gate");
+  assert.ok(plan.includes(1500));
+  assert.ok(plan.length >= 2);
+});
+
 test("suggests a rest day after the weekly number of sessions", () => {
   const days = ["2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17"];
   const sessions = map(days.map(d => session(d, 120, [rep(0, 30, "calm")])));
