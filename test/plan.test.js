@@ -32,9 +32,24 @@ test("not reaching the longest rep repeats the level", () => {
   assert.equal(computeWorking(config, map([s]), "2026-10-19").w, 120);
 });
 
-test("staying out longer on a calm day is a normal step up, not a jump", () => {
+test("staying calm well past the plan catches up to 75% of that time", () => {
   const s = session("2026-10-18", 120, [rep(0, 30, "calm"), rep(1, 120, "calm", 300)]);
+  assert.equal(computeWorking(config, map([s]), "2026-10-19").w, 225);
+});
+
+test("a little extra time is still the normal 15% step", () => {
+  const s = session("2026-10-18", 120, [rep(0, 120, "calm", 140)]);
   assert.equal(computeWorking(config, map([s]), "2026-10-19").w, 135);
+});
+
+test("one long calm stretch on a short rep counts too", () => {
+  const s = session("2026-10-18", 240, [rep(0, 90, "calm", 900)]);
+  assert.equal(computeWorking(config, map([s]), "2026-10-19").w, 660);   // 75% of 15m = 11m15s, rounded to the minute
+});
+
+test("no catching up when part of the session was stressful", () => {
+  const s = session("2026-10-18", 240, [rep(0, 90, "calm", 900), rep(1, 240, "mild")]);
+  assert.equal(computeWorking(config, map([s]), "2026-10-19").w, 210);   // the usual 15% step back
 });
 
 test("mild stress only in extra time holds the level", () => {

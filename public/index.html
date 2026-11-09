@@ -650,7 +650,8 @@ import * as P from "/plan.js";
           ? `Close the gate with ${esc(dog())} on the other side and go out of sight: another room, or round a corner. Come back when the timer ends.`
           : `Head out through both doors and tap "I'm out" once they're shut. The timer starts then. Come back when it ends.`} Come back early if ${esc(dog())} starts to stress. Between reps, sit calmly for 1–2 minutes until ${esc(dog())} settles.`)}</div>
         <ol class="reps">${repRows}</ol>
-        ${!rest ? `<div class="row"><button class="btn sm ghost" data-act="add-rep">Add a rep</button><input type="text" id="extra-dur" placeholder="e.g. 45s" style="width:8rem" autocomplete="off"></div>` : ""}
+        ${!rest ? `<div class="row"><button class="btn sm ghost" data-act="add-rep">Add a rep</button><input type="text" id="extra-dur" placeholder="e.g. 45s" style="width:8rem" autocomplete="off"></div>
+        <button class="hint-toggle" data-act="log-manual" style="justify-self:start">Did one without the timer? Log it here</button>` : ""}
       </div>
       <button class="btn ghost" data-act="log-absence" style="justify-self:start">Log time alone</button>
       ${s ? `<div class="card"><label class="field">Notes for today<textarea id="notes" placeholder="What you noticed: triggers, what helped, who was home">${esc(s.notes || "")}</textarea></label></div>` : ""}
@@ -906,7 +907,7 @@ import * as P from "/plan.js";
         <table class="rp-table"><thead class="rp-block"><tr><th>Date</th><th>Time</th><th>How long</th><th>How it went</th><th>Note</th></tr></thead><tbody>
           ${absences.map(a => `<tr class="rp-block"><td>${esc(niceDate(a.date, { weekday: "short", day: "numeric", month: "short" }))}</td><td>${timeOf(a.start)}</td><td>${fmt(a.seconds)}</td><td>${ABS_LABEL[a.result]}${a.tags && a.tags.length ? `<br><span class="muted">${esc(a.tags.join(", "))}</span>` : ""}</td><td>${esc(a.note || "")}</td></tr>`).join("")}
         </tbody></table>` : ""}
-        <div class="rp-block small muted"><b style="color:var(--ink)">How the plan adjusts.</b> Each session has a longest rep, with shorter reps above and below it (3–4 longer reps behind the gate, 6–8 short ones at the front door). All calm through the longest rep: next session about +15% (extra time added on a good day doesn't make the step bigger). Mild stress: −15%, or the same level if it only happened in extra time. Upset: stop for the day, next session at 60% of where it went wrong. Breaks of 4–6, 7–13 and 14+ days restart at 85%, 70% and 50%. An upset real absence makes the next session 25% easier.</div>
+        <div class="rp-block small muted"><b style="color:var(--ink)">How the plan adjusts.</b> Each session has a longest rep, with shorter reps above and below it (3–4 longer reps behind the gate, 6–8 short ones at the front door). All calm through the longest rep: next session about +15%; if the whole session was calm and a rep ran longer than planned, the next level is at least 75% of that time. Mild stress: −15%, or the same level if it only happened in extra time. Upset: stop for the day, next session at 60% of where it went wrong. Breaks of 4–6, 7–13 and 14+ days restart at 85%, 70% and 50%. An upset real absence makes the next session 25% easier.</div>
       </div>`;
   }
 
@@ -1103,7 +1104,7 @@ import * as P from "/plan.js";
             <ul>
               <li>Each day has a <b>longest rep</b>. The other reps go up and down around it, so most reps are easier than the last one. That keeps the stress low.</li>
               <li>Behind the gate there are 3–4 longer reps. At the front door there are 6–8 short ones, because that's where the small steps matter.</li>
-              <li>All calm through the longest rep: next session goes up about 15% (or +5 seconds for short times). Staying out longer than planned on a good day counts as calm, but the next step stays small.</li>
+              <li>All calm through the longest rep: next session goes up about 15% (or +5 seconds for short times). If the whole session was calm and ${esc(dog())} stayed calm longer than planned, the next longest rep catches up to at least 75% of that time.</li>
               <li>Calm for the planned time but a bit stressed only in extra time you added: same level next session.</li>
               <li>Mild stress: next session steps back about 15%.</li>
               <li>Upset: stop for the day. The next session drops to 60% of where it went wrong.</li>
@@ -1455,6 +1456,39 @@ import * as P from "/plan.js";
     };
   }
 
+  // A rep done without starting the timer (e.g. one long stretch behind the gate). Added to today's plan as done.
+  function manualRepSheet() {
+    let result = "calm";
+    const now = new Date();
+    sheet(`
+      <div><p class="eyebrow">${esc(niceDate(todayStr(), { weekday: "short", day: "numeric", month: "short" }))}</p><h2 style="margin-top:6px">Log a rep without the timer</h2></div>
+      <div class="outcome">
+        <p class="small" style="color:#b4aaa0">For time ${esc(dog())} spent alone in training when you didn't start a rep in the app. It counts for the plan like any other rep.</p>
+        <div class="row">
+          <input type="text" id="m-dur" placeholder="How long, e.g. 12m" autocomplete="off" style="flex:1">
+          <input type="time" id="m-time" value="${pad(now.getHours())}:${pad(now.getMinutes())}" aria-label="When it ended" style="flex:1">
+        </div>
+        ${resultButtons(result)}
+        <div id="tag-box"></div>
+        <input type="text" id="m-note" placeholder="Note (optional)" autocomplete="off">
+        <div class="row"><button class="btn" id="m-save">Save rep</button><button class="btn quiet" id="m-cancel">Cancel</button></div>
+      </div>`);
+    const picker = tagPicker(result, []);
+    wireResults(v => { result = v; picker.setResult(v); });
+    overlay.querySelector("#m-cancel").onclick = closeSheet;
+    overlay.querySelector("#m-save").onclick = () => {
+      const secs = parseDur(overlay.querySelector("#m-dur").value);
+      if (!secs) return toast("Type how long, like 12m or 1:30.");
+      const t = todayStr(), s = ensureToday();
+      const [hh, mm] = (overlay.querySelector("#m-time").value || `${pad(now.getHours())}:${pad(now.getMinutes())}`).split(":").map(Number);
+      const at = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm).getTime();
+      const i = s.plan.length;
+      saveSession(t, { plan: s.plan.concat([secs]) });
+      saveReps(t, [{ i, target: secs, actual: secs, result, tags: picker.tags(), note: overlay.querySelector("#m-note").value.trim(), setup: s.setup || lastSetup(), by: state.me, startedAt: at - secs * 1000, at, manual: true }]);
+      closeSheet(); toast(`Logged ${fmt(secs)}.`);
+    };
+  }
+
   function absenceSheet(existing) {
     const a = existing || null;
     const now = new Date();
@@ -1523,6 +1557,7 @@ import * as P from "/plan.js";
     else if (act === "report-pdf") exportReport("pdf");
     else if (act === "report-png") exportReport("png");
     else if (act === "log-absence") absenceSheet(null);
+    else if (act === "log-manual") manualRepSheet();
     else if (act === "edit-absence") absenceSheet(state.absences.find(a => a.id === b.dataset.id));
     else if (act === "logout") { api("/api/logout", { method: "POST" }).catch(() => {}).finally(() => { state.me = null; state.configLoaded = false; lastSnapshot = ""; render(); }); }
     else if (act === "toggle-hint") {

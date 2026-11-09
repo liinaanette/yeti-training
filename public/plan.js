@@ -29,6 +29,8 @@ const GATE_PATTERNS = [
 // Bumped when the shape of plans changes, so an untouched plan for today can be rebuilt.
 export const PLAN_VERSION = 2;
 export const REST_BETWEEN = 90;
+// After a fully calm session, the next level is at least this share of the longest calm time.
+const CATCH_UP = 0.75;
 
 // ---------- dates and durations ----------
 const pad = n => String(n).padStart(2, "0");
@@ -67,10 +69,11 @@ export function nextAfter(s, dog) {
   const done = doneReps(s);
   const upset = done.filter(r => r.result === "upset");
   const mild = done.filter(r => r.result === "mild");
-  const calmTop = done.some(r => r.result === "calm" && r.target >= prev * 0.97);
-  // Extra time: staying out past the planned length when the dog was relaxed.
+  // How long a rep really lasted: extra time (staying out past the plan) counts.
+  const lasted = r => Math.max(r.target, r.actual || 0);
   const overtime = r => r.actual > r.target;
-  const reachedTop = done.some(r => r.target >= prev * 0.97 && (r.result === "calm" || (r.result === "mild" && overtime(r))));
+  const calmTop = done.some(r => r.result === "calm" && lasted(r) >= prev * 0.97);
+  const reachedTop = calmTop || done.some(r => r.target >= prev * 0.97 && r.result === "mild" && overtime(r));
   if (upset.length) {
     const t = Math.min(...upset.map(r => r.actual || r.target));
     return { w: Math.min(prev, t) * 0.6, why: `${dog} got upset last session, so today steps back for an easy win.` };
@@ -79,7 +82,15 @@ export function nextAfter(s, dog) {
     return { w: prev, why: `${dog} was calm for the planned time and only got a bit stressed in the extra time, so today repeats the same level.` };
   }
   if (mild.length) return { w: prev * 0.85, why: "Some mild stress last session, so today is a small step back." };
-  if (calmTop) return { w: grow(prev), why: `${dog} stayed calm through the longest rep last time, so today steps up.` };
+  if (calmTop) {
+    // A fully calm session where the dog stayed calm well past the plan: catch up to 75% of that time.
+    const longestCalm = Math.max(...done.map(lasted));
+    const proven = CATCH_UP * longestCalm;
+    if (proven > grow(prev)) {
+      return { w: proven, why: `${dog} stayed calm for ${fmt(longestCalm)} last session, so today's longest rep catches up to ${fmt(roundDur(proven))}.` };
+    }
+    return { w: grow(prev), why: `${dog} stayed calm through the longest rep last time, so today steps up.` };
+  }
   return { w: prev, why: "Last session didn't get through the longest rep, so today repeats the same level." };
 }
 
