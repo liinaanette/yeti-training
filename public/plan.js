@@ -212,9 +212,14 @@ export function guideStep(config) {
 
 const repSetup = (r, s) => r.setup || s.setup || "gate";
 
+// Owners who keep the gate for good (config.keepGate) skip the "gate open" step,
+// and the last step then counts reps behind the gate too.
+const stepSetups = (config, step) => (step === 3 && config && config.keepGate ? ["gate", "gate-open", "free"] : GUIDE[step].setups);
+export const nextGuideStep = (config, step) => (step === 1 && config && config.keepGate ? 3 : step + 1);
+
 // Best calm rep and the run of calm sessions within one step (its stage and setups).
-export function guideStats(sessions, step) {
-  const g = GUIDE[step];
+export function guideStats(sessions, step, setups = GUIDE[step].setups) {
+  const g = { ...GUIDE[step], setups };
   const inStep = [...sessions.values()]
     .filter(s => sessionMode(s) === g.mode && doneReps(s).some(r => g.setups.includes(repSetup(r, s))))
     .sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -228,7 +233,7 @@ export function guideStats(sessions, step) {
 // The current step's checklist: automatic checks from the sessions, manual ones from config.guideChecks.
 export function guideProgress(config, sessions) {
   const step = guideStep(config);
-  const st = guideStats(sessions, step);
+  const st = guideStats(sessions, step, stepSetups(config, step));
   const manual = (config && config.guideChecks) || {};
   const checks = GUIDE[step].checks.map(c => {
     if (c.manual) return { ...c, done: !!manual[`${GUIDE[step].id}:${c.id}`] };

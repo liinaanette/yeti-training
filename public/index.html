@@ -245,6 +245,7 @@ label.field span.muted { font-weight: 400; }
 .step { background: var(--surface); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 10px; box-shadow: var(--shadow); }
 .step-head { display: flex; gap: 12px; align-items: center; }
 .step-num { width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; background: var(--surface-2); color: var(--muted); border: 2px solid var(--line); }
+.step.skipped { opacity: 0.7; }
 .step.done .step-num { background: var(--calm); border-color: var(--calm); color: var(--surface); }
 .step.current { outline: 2px solid var(--accent); }
 .step.current .step-num { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -736,7 +737,7 @@ import * as P from "/plan.js";
         `Stop a rep at the first sign of stress. Don't wait for barking.`,
       ],
       checks: { calm: "Calm for 30 minutes with you out of the flat", streak: "3 calm sessions in a row", returns: d => `Calm when you come back: no frantic greeting` },
-      next: () => "Open the gate. This is harder, so the door level is halved to start with.",
+      next: (d, keepGate) => (keepGate ? `Move on to building longer absences, with ${d} still behind the gate.` : "Open the gate. This is harder, so the door level is halved to start with."),
     },
     {
       title: "Gate open or free in the flat",
@@ -765,11 +766,14 @@ import * as P from "/plan.js";
   function guideView() {
     const g = P.guideProgress(state.config, state.sessions);
     const d = esc(dog());
+    const keepGate = !!state.config.keepGate;
     const stepCard = (t, i) => {
-      const cls = i < g.step ? "done" : i === g.step ? "current" : "";
-      const head = `<div class="step-head"><span class="step-num">${i < g.step ? "✓" : i + 1}</span><div><h2>${esc(t.title)}</h2><p class="small muted">${t.summary(d)}</p></div></div>`;
+      const skipped = keepGate && i === 2;
+      const cls = skipped ? "skipped" : i < g.step ? "done" : i === g.step ? "current" : "";
+      const head = `<div class="step-head"><span class="step-num">${skipped ? "–" : i < g.step ? "✓" : i + 1}</span><div><h2>${esc(t.title)}</h2><p class="small muted">${skipped ? `Skipped: you're keeping the gate. The room behind the gate is ${d}'s place.` : t.summary(d)}</p></div></div>`;
+      const keepToggle = i === 2 ? `<label class="check small"><input type="checkbox" data-keep-gate ${keepGate ? "checked" : ""}> We'll keep the gate (skip this step)</label>` : "";
       if (i !== g.step) {
-        return `<div class="step ${cls}">${head}${i > g.step ? `<button class="hint-toggle" data-act="guide-set" data-step="${i}" style="justify-self:start">I'm already on this step</button>` : ""}</div>`;
+        return `<div class="step ${cls}">${head}${keepToggle}${i > g.step && !skipped ? `<button class="hint-toggle" data-act="guide-set" data-step="${i}" style="justify-self:start">I'm already on this step</button>` : ""}</div>`;
       }
       const items = g.checks.map(c => {
         const label = typeof t.checks[c.id] === "function" ? t.checks[c.id](d) : t.checks[c.id];
@@ -783,9 +787,10 @@ import * as P from "/plan.js";
         <div class="prose small"><ul>${t.todo(d).map(x => `<li>${x}</li>`).join("")}</ul></div>
         ${g.checks.length ? `<div style="display:grid;gap:8px"><span class="eyebrow">${g.last ? "Milestone" : "Ready to move on when"}</span><ul class="checklist">${items}</ul></div>` : ""}
         ${!g.last ? `<div style="display:grid;gap:6px">
-          ${g.ready ? `<p class="small">All done. ${t.next(d)}</p>` : `<p class="small muted">Next step: ${t.next(d)}</p>`}
+          ${g.ready ? `<p class="small">All done. ${t.next(d, keepGate)}</p>` : `<p class="small muted">Next step: ${t.next(d, keepGate)}</p>`}
           <div class="row"><button class="btn ${g.ready ? "" : "ghost"} sm" data-act="guide-next">${g.ready ? "Move to the next step" : "Move on anyway"}</button></div>
         </div>` : ""}
+        ${keepToggle}
       </div>`;
     };
     return `
@@ -824,7 +829,7 @@ import * as P from "/plan.js";
   // Moving to the next step also sets up the app for it.
   function guideNext() {
     const g = P.guideProgress(state.config, state.sessions);
-    const step = g.step + 1;
+    const step = P.nextGuideStep(state.config, g.step);
     if (step >= P.GUIDE.length) return;
     if (step === 1) {
       saveConfig({ lastSetup: "gate", guideStep: 1 });
@@ -841,7 +846,7 @@ import * as P from "/plan.js";
       toast(`Next step: gate open. The level starts at ${fmt(roundDur(Math.max(3, w * 0.5)))}.`);
     } else {
       saveConfig({ guideStep: step });
-      toast("Next step: longer absences.");
+      toast(state.config.keepGate ? `Next step: longer absences, with ${dog()} behind the gate.` : "Next step: longer absences.");
     }
     window.scrollTo(0, 0);
   }
@@ -1650,6 +1655,11 @@ import * as P from "/plan.js";
   });
 
   appEl.addEventListener("change", e => {
+    if ("keepGate" in e.target.dataset) {
+      saveConfig({ keepGate: e.target.checked });
+      toast(e.target.checked ? "Keeping the gate: the gate-open step is skipped." : "The gate-open step is back in the Guide.");
+      return;
+    }
     if (e.target.dataset.guideCheck) {
       saveConfig({ guideChecks: { ...(state.config.guideChecks || {}), [e.target.dataset.guideCheck]: e.target.checked } });
       return;

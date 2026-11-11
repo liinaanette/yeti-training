@@ -1,7 +1,7 @@
 // Run with: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildPlan, computeWorking, guideProgress, guideStep, nextAfter, restSuggested, todaySummary, weeklySummary, weeklyText } from "../public/plan.js";
+import { buildPlan, computeWorking, guideProgress, guideStep, nextGuideStep, nextAfter, restSuggested, todaySummary, weeklySummary, weeklyText } from "../public/plan.js";
 
 const config = { dogName: "Yeti", mode: "gate", bases: { gate: { seconds: 120, setOn: "2026-10-01", setAt: 1 } }, perWeek: 5, capMin: 30 };
 const rep = (i, target, result, actual = target) => ({ i, target, actual, result });
@@ -162,4 +162,12 @@ test("door step only counts door reps with the dog behind the gate", () => {
   assert.equal(g.step, 1);
   assert.equal(g.checks[0].best, 900);
   assert.equal(g.stats.sessions, 1);
+});
+
+test("keeping the gate skips the gate-open step and counts gate reps at the end", () => {
+  assert.equal(nextGuideStep({ keepGate: true }, 1), 3);
+  assert.equal(nextGuideStep({}, 1), 2);
+  const long = { ...session("2026-11-10", 7200, [rep(0, 7200, "calm", 7300)], "door"), setup: "gate" };
+  assert.equal(guideProgress({ ...config, mode: "door", guideStep: 3, keepGate: true }, map([long])).ready, true);
+  assert.equal(guideProgress({ ...config, mode: "door", guideStep: 3 }, map([long])).ready, false);
 });
