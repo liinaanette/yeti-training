@@ -19,7 +19,7 @@ A phone-first web app two people (the dog's owners) use to run separation-anxiet
 
 - `config` (one row, id `main`): dog name, stage (`mode`: `gate` | `door`), per-stage starting levels (`bases`), sessions per week, session cap, time zone.
 - `sessions` (one row per local date `YYYY-MM-DD`): stage, `setup` (how the dog is left: `gate` | `gate-open` | `free`; last used kept in `config.lastSetup`), working (longest rep) seconds, plan (array of rep seconds), cues, notes. Each rep and absence also stores its own `setup`. Setup doesn't change the plan maths; owners reset the level when moving to a harder setup.
-- `reps` (one row per rep, key `date + i`): target, actual, result (`calm` | `mild` | `upset` | `skip`), `tags` (labels picked after the result; lists in `TAGS` in index.html, the owners' own in `config.customTags`), trainer name, `startedAt`/`at` timestamps. Kept separate from sessions so two phones can't overwrite each other.
+- `reps` (one row per rep, key `date + i`): target, actual, result (`calm` | `mild` | `upset` | `skip`), `tags` (labels picked after the result; lists in `TAGS` in index.html, the owners' own in `config.customTags`), `moments` (notes taken during the rep from the timer's "+ Note": `{ t: seconds into the rep, tag | note, result }`), trainer name, `startedAt`/`at` timestamps. Kept separate from sessions so two phones can't overwrite each other.
 - `absences`: real times alone outside training.
 - `push_subs`: one row per phone with notification preferences (`morning`, `evening`, `weekly`, `morningTime`, `eveningTime`, `tz`) and `scheduled` (booked QStash reminders).
 - `login_attempts`: wrong-password limiter (10 per 15 min per IP).

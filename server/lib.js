@@ -152,3 +152,10 @@ export async function loadAll(sql) {
 // Tags are short labels the owners pick after a result ("Lay down", "Whined", or their own).
 export const cleanTags = v => (Array.isArray(v) ? [...new Set(v.filter(t => typeof t === "string").map(t => t.trim().slice(0, 40)).filter(Boolean))].slice(0, 15) : []);
 export const SETUPS = ["gate", "gate-open", "free"];
+// Notes taken during a rep: [{ t: seconds into the rep, tag?, note?, result? }].
+export const cleanMoments = v => (Array.isArray(v) ? v.filter(m => m && typeof m === "object" && Number.isFinite(m.t) && m.t >= 0).slice(0, 40).map(m => ({
+  t: Math.round(m.t),
+  ...(typeof m.tag === "string" && m.tag.trim() ? { tag: m.tag.trim().slice(0, 40) } : {}),
+  ...(typeof m.note === "string" && m.note.trim() ? { note: m.note.trim().slice(0, 200) } : {}),
+  ...(["calm", "mild", "upset"].includes(m.result) ? { result: m.result } : {}),
+})).filter(m => m.tag || m.note) : []);
